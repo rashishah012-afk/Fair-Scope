@@ -96,7 +96,7 @@ function roundClean(n: number) {
   return Math.round(n / 5000) * 5000;
 }
 
-function inr(n) {
+function inr(n: number) {
   return "₹" + Math.round(n).toLocaleString("en-IN");
 }
 
