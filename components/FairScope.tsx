@@ -2553,19 +2553,14 @@ Rules:
 - Max 18 primary, 12 secondary`;
 
     try {
-      const res  = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model: "claude-sonnet-4-20250514",
-          max_tokens: 1000,
-          messages: [{ role: "user", content: prompt }],
-        }),
-      });
-      const data = await res.json();
-      const text = data.content?.[0]?.text || "";
-      const clean = text.replace(/```json|```/g, "").trim();
-      const analysis = JSON.parse(clean);
+      const res = await fetch('/api/analyze', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ prompt }),
+});
+const text = data.text || '';
+const clean = text.replace(/```json|```/g, "").trim();
+const analysis = JSON.parse(clean);
       upd({ aiAnalysis: analysis, _aiRemovedP: [], _aiRemovedS: [] });
       setAiStatus("done");
       goStep(3); // AI confirm step
