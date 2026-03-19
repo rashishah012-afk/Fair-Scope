@@ -89,7 +89,7 @@ const GST_RATE               = 0.18;  // 18% Indian GST
 // CALCULATION ENGINE
 // ─────────────────────────────────────────────────────────────────────────────
 
-function roundClean(n) {
+function roundClean(n: number) {
   if (n < 10000)  return Math.round(n / 500) * 500;
   if (n < 50000)  return Math.round(n / 1000) * 1000;
   if (n < 200000) return Math.round(n / 2500) * 2500;
