@@ -89,14 +89,14 @@ const GST_RATE               = 0.18;  // 18% Indian GST
 // CALCULATION ENGINE
 // ─────────────────────────────────────────────────────────────────────────────
 
-function roundClean(n: number) {
+function roundClean(n) {
   if (n < 10000)  return Math.round(n / 500) * 500;
   if (n < 50000)  return Math.round(n / 1000) * 1000;
   if (n < 200000) return Math.round(n / 2500) * 2500;
   return Math.round(n / 5000) * 5000;
 }
 
-function inr(n: number) {
+function inr(n) {
   return "₹" + Math.round(n).toLocaleString("en-IN");
 }
 
@@ -2554,13 +2554,14 @@ Rules:
 
     try {
       const res = await fetch('/api/analyze', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({ prompt }),
-});
-const text = data.text || '';
-const clean = text.replace(/```json|```/g, "").trim();
-const analysis = JSON.parse(clean);
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt }),
+      });
+      const data = await res.json();
+      const text = data.text || '';
+      const clean = text.replace(/```json|```/g, '').trim();
+      const analysis = JSON.parse(clean);
       upd({ aiAnalysis: analysis, _aiRemovedP: [], _aiRemovedS: [] });
       setAiStatus("done");
       goStep(3); // AI confirm step
