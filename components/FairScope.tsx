@@ -2532,7 +2532,7 @@ function FairScopeEstimator() {
   function showResults() { setScreen("results"); top(); }
 
   async function runAI(desc) {
-    setAiStatus("loading");
+    setAiStatus("done"); goStep(3);
     const pt = PROJECT_TYPES.find(p => p.id === state.projectType)?.label || "product";
     const prompt = `You are a senior UX designer scoping a ${pt} project. Analyse this description and extract design scope:
 "${desc}"
@@ -2680,6 +2680,7 @@ Rules:
 export default function FairScope() {
   return <FairScopeEstimator />;
 }
+
 
 
 
