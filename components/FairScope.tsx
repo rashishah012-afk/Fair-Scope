@@ -2561,7 +2561,7 @@ Rules:
       const data = await res.json();
       const text = data.text || '';
       const clean = text.replace(/```json|```/g, '').trim();
-      let analysis; try { analysis = JSON.parse(clean); } catch(e) { analysis = { raw: clean }; }
+      const analysis = JSON.parse(clean);
       upd({ aiAnalysis: analysis, _aiRemovedP: [], _aiRemovedS: [] });
       setAiStatus("done");
       goStep(3); // AI confirm step
@@ -2571,7 +2571,6 @@ Rules:
     }
   }
 
-  
   // ── QUICK FLOW STEPS ──────────────────────────────────────────────────────
   const QUICK_STEPS = [
     () => <StepProjectType    state={state} onUpdate={upd} onNext={next} onBack={back} />,
