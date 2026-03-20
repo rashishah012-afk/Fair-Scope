@@ -2333,9 +2333,6 @@ function FairScopeEstimator() {
 
   function showResults() { setScreen("results"); top(); }
 
-
-    }
-
   // ── QUICK FLOW STEPS ──────────────────────────────────────────────────────
   const QUICK_STEPS = [
     () => <StepProjectType    state={state} onUpdate={upd} onNext={next} onBack={back} />,
