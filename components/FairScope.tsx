@@ -2680,3 +2680,4 @@ Rules:
 export default function FairScope() {
   return <FairScopeEstimator />;
 }
+
