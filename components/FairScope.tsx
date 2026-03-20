@@ -2561,7 +2561,7 @@ Rules:
       const data = await res.json();
       const text = data.text || '';
       const clean = text.replace(/```json|```/g, '').trim();
-      const analysis = JSON.parse(clean);
+      let analysis; try { analysis = JSON.parse(clean); } catch(e) { analysis = { raw: clean }; }
       upd({ aiAnalysis: analysis, _aiRemovedP: [], _aiRemovedS: [] });
       setAiStatus("done");
       goStep(3); // AI confirm step
@@ -2680,4 +2680,6 @@ Rules:
 export default function FairScope() {
   return <FairScopeEstimator />;
 }
+
+
 
