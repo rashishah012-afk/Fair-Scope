@@ -220,9 +220,7 @@ function buildJustification(s, est) {
   const uxLine   = uxNames.length
     ? `\n\nThe engagement includes structured UX research — ${uxNames.slice(0, 4).join(", ")}${uxNames.length > 4 ? ", and more" : ""}.`
     : "";
-  const aiLine   = s.mode === "ai" && s.aiAnalysis
-    ? `\n\nScope was derived from a detailed analysis of your project brief, confirming ${s.primaryScreens} primary screens and ${s.secondaryScreens} secondary screens.`
-    : "";
+  const aiLine   = "";
   const gstLine  = s.includeGST ? ` GST (18%) of ${inr(est.gstMid)} is included.` : "";
 
   return `This is a ${pt.toLowerCase()} project requiring approximately ${est.totalHrs} design hours.${uxLine}${aiLine}
@@ -1574,13 +1572,7 @@ function EntryScreen({ onSelect }: any) {
           <div className="ec-title">Scope Builder</div>
           <div className="ec-desc">You know screens and deliverables. Build a detailed, defensible estimate from the ground up.</div>
         </button>
-        <button className="entry-card featured" onClick={() => onSelect("ai")}>
-          <span className="ec-arrow">→</span>
-          <div className="ec-badge">AI-assisted</div>
-          <div className="ec-num">03</div>
-          <div className="ec-title">Describe Your Project</div>
-          <div className="ec-desc">Paste a project brief. AI extracts screens and flows — you confirm, then continue building your estimate.</div>
-        </button>
+
       </div>
     </div>
   );
@@ -1881,9 +1873,7 @@ function ReviewScope({ state, onNext, onBack, jumpTo }: any) {
   const fc      = FLOW_COMPLEXITY.find(f => f.id === state.flowComplexity);
   const ds      = DESIGN_SYSTEM.find(d => d.id === state.designSystem);
   const uxNames = state.uxActivities.map(id => ALL_UX_ITEMS.find(u => u.id === id)?.label).filter(Boolean).join(", ") || "None";
-  const screenStr = state.aiAnalysis
-    ? `${state.primaryScreens} primary + ${state.secondaryScreens} secondary (AI)`
-    : `${state.primaryScreens} primary${state.secondaryScreens > 0 ? " + " + state.secondaryScreens + " secondary" : ""}`;
+  const screenStr = `${state.primaryScreens} primary${state.secondaryScreens > 0 ? " + " + state.secondaryScreens + " secondary" : ""}`;
 
   return (
     <div className="screen">
@@ -1918,171 +1908,6 @@ function ReviewScope({ state, onNext, onBack, jumpTo }: any) {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // AI FLOW
-// ─────────────────────────────────────────────────────────────────────────────
-
-function StepAIDescription({ state, onUpdate, onAnalyse, onSkip, onBack }: any) {
-  const [desc, setDesc] = useState(state._aiDesc || "");
-
-  return (
-    <div className="screen">
-      <Back onClick={onBack} />
-      <h2 className="screen-title">Describe your<br /><em>project.</em></h2>
-      <p className="screen-sub">Paste a brief, RFP, or your own notes. AI will extract primary screens, secondary screens, and key flows.</p>
-
-      <textarea
-        className="txt-area"
-        placeholder="e.g. A mobile app for booking fitness classes with login, profile, booking flow, payment integration and an admin dashboard for gym owners to manage schedules and view analytics."
-        value={desc}
-        onChange={e => setDesc(e.target.value)}
-      />
-      <p className="info-note">More detail yields more accurate extraction. Include user roles, key features, and any integrations.</p>
-
-      <GoldBtn onClick={() => { onUpdate({ _aiDesc: desc }); onAnalyse(desc); }} disabled={desc.trim().length < 20}>
-        Analyse with AI →
-      </GoldBtn>
-      <OutlineBtn onClick={onSkip}>Skip — enter screens manually instead</OutlineBtn>
-    </div>
-  );
-}
-
-function StepAILoading() {
-  return (
-    <div className="screen">
-      <div className="ai-loading">
-        <div className="spinner" />
-        <p className="ai-loading-text">Analysing your project description…</p>
-        <span className="ai-loading-sub">Extracting screens, flows, and features</span>
-      </div>
-    </div>
-  );
-}
-
-function StepAIConfirm({ state, onUpdate, onNext, onBack }: any) {
-  const a         = state.aiAnalysis;
-  const remP      = state._aiRemovedP || [];
-  const remS      = state._aiRemovedS || [];
-  const activeP   = a.primaryScreens.filter((_, i) => !remP.includes(i));
-  const activeS   = a.secondaryScreens.filter((_, i) => !remS.includes(i));
-  const effHrs    = activeP.length * 4 + activeS.length * 1.5;
-
-  const removeP   = i => onUpdate({ _aiRemovedP: [...remP, i] });
-  const restoreP  = i => onUpdate({ _aiRemovedP: remP.filter(x => x !== i) });
-  const removeS   = i => onUpdate({ _aiRemovedS: [...remS, i] });
-  const restoreS  = i => onUpdate({ _aiRemovedS: remS.filter(x => x !== i) });
-
-  function confirm() {
-    onUpdate({
-      primaryScreens: activeP.length,
-      secondaryScreens: activeS.length,
-      _aiActiveP: activeP,
-      _aiActiveS: activeS,
-    });
-    onNext();
-  }
-
-  return (
-    <div className="screen">
-      <Back onClick={onBack} label="Edit description" />
-      <h2 className="screen-title">Review <em>extracted</em><br />scope.</h2>
-      <p className="screen-sub">Remove any screens that are out of scope. Secondary screens are weighted at 1.5 hrs each.</p>
-
-      <DescriptionPreview description={state._aiDesc} />
-
-      {/* Flows + Features */}
-      <div className="flows-grid">
-        <div className="ff-card">
-          <div className="ff-title">Key Flows</div>
-          <ul className="ff-list">
-            {a.keyFlows.map((f, i) => (
-              <li key={i}><span className="ff-dot" />{f}</li>
-            ))}
-          </ul>
-        </div>
-        <div className="ff-card">
-          <div className="ff-title">Core Features</div>
-          <ul className="ff-list">
-            {a.coreFeatures.map((f, i) => (
-              <li key={i}><span className="ff-dot" />{f}</li>
-            ))}
-          </ul>
-        </div>
-      </div>
-
-      {/* Primary Screens */}
-      <div className="sc-section">
-        <div className="sc-section-hd">
-          <span className="sc-section-title">Primary Screens</span>
-          <span className="sc-badge">{activeP.length} active · 4 hrs each</span>
-        </div>
-        <div className="sc-list">
-          {a.primaryScreens.map((sc, i) => {
-            const removed = remP.includes(i);
-            return (
-              <div key={i} className={`sc-item${removed ? " removed" : ""}`}>
-                <span className="sc-item-left">
-                  <span className="sc-item-name">{sc.name}</span>
-                  <span className="sc-item-why">{sc.reason}</span>
-                </span>
-                <span className="sc-badge-p">Primary</span>
-                {removed
-                  ? <button className="sc-restore" onClick={() => restoreP(i)}>Restore</button>
-                  : <button className="sc-remove" onClick={() => removeP(i)}>×</button>
-                }
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Secondary Screens */}
-      <div className="sc-section">
-        <div className="sc-section-hd">
-          <span className="sc-section-title">Secondary Screens</span>
-          <span className="sc-badge">{activeS.length} active · 1.5 hrs each</span>
-        </div>
-        <div className="sc-list">
-          {a.secondaryScreens.map((sc, i) => {
-            const removed = remS.includes(i);
-            return (
-              <div key={i} className={`sc-item${removed ? " removed" : ""}`}>
-                <span className="sc-item-left">
-                  <span className="sc-item-name">{sc.name}</span>
-                  <span className="sc-item-why">{sc.reason}</span>
-                </span>
-                <span className="sc-badge-s">Secondary</span>
-                {removed
-                  ? <button className="sc-restore" onClick={() => restoreS(i)}>Restore</button>
-                  : <button className="sc-remove" onClick={() => removeS(i)}>×</button>
-                }
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Summary */}
-      <div className="confirm-summary">
-        <div className="conf-cell">
-          <div className="conf-num">{activeP.length}</div>
-          <div className="conf-lbl">Primary screens</div>
-        </div>
-        <div className="conf-cell">
-          <div className="conf-num">{activeS.length}</div>
-          <div className="conf-lbl">Secondary screens</div>
-        </div>
-        <div className="conf-cell accent">
-          <div className="conf-num">{Math.round(effHrs)} hrs</div>
-          <div className="conf-lbl">Base screen effort before modifiers</div>
-        </div>
-      </div>
-
-      <PrimaryBtn onClick={confirm} disabled={activeP.length === 0}>Confirm Scope →</PrimaryBtn>
-    </div>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// SUSTAINABILITY STEPS
 // ─────────────────────────────────────────────────────────────────────────────
 
 function StepPMOverhead({ state, onUpdate, onNext, onBack }: any) {
@@ -2197,7 +2022,7 @@ function ResultsScreen({ state, onRestart }: any) {
       "═".repeat(42),
       "",
       `Project: ${pt}`,
-      `Mode: ${state.mode === "quick" ? "Quick Estimate" : state.mode === "ai" ? "AI Mode + Scope Builder" : "Scope Builder"}`,
+      `Mode: ${state.mode === "quick" ? "Quick Estimate" : "Scope Builder"}`,
       `Design Hours: ${est.totalHrs} hrs`,
       `Market Rate: ${est.expLevel?.rangeLabel || ""}  (midpoint ${inr(est.midRate)}/hr)`,
       `Utilization: ${Math.round(est.utilization * 100)}%  →  Effective rate: ${inr(est.effRateMid)}/hr`,
@@ -2234,7 +2059,6 @@ function ResultsScreen({ state, onRestart }: any) {
   }
 
   const hrsDetail = est.hrsDetail;
-  const hasAI     = state.mode === "ai" && state._aiActiveP;
 
   return (
     <div className="result-wrap">
@@ -2370,22 +2194,8 @@ function ResultsScreen({ state, onRestart }: any) {
         </div>
       </div>
 
-      {/* ── AI Confirmed Screens ── */}
-      {hasAI && (
-        <div className="result-card">
-          <div className="rc-title">AI Scope — Confirmed Screens</div>
-          <div className="ai-screens-cloud">
-            {state._aiActiveP.map((sc, i) => (
-              <span key={i} className="ai-tag-p">{sc.name}</span>
-            ))}
-            {state._aiActiveS.map((sc, i) => (
-              <span key={i} className="ai-tag-s">{sc.name}</span>
-            ))}
-          </div>
-        </div>
-      )}
 
-      {/* ── Client Justification ── */}
+      {/* ── Client Justification      {/* ── Client Justification ── */}
       <div className="result-card">
         <div className="rc-title">Client-Ready Justification</div>
         <p className="jtext">{just}</p>
@@ -2423,12 +2233,6 @@ const INIT_STATE = {
   utilizationRate:  UTILIZATION_DEFAULT,
   freelanceMult:    FREELANCE_MULT_DEFAULT,
   includeGST:       false,
-  aiAnalysis:       null,
-  _aiDesc:          "",
-  _aiRemovedP:      [],
-  _aiRemovedS:      [],
-  _aiActiveP:       null,
-  _aiActiveS:       null,
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -2438,7 +2242,7 @@ const INIT_STATE = {
 const STEPPER_LABELS = {
   quick: ["Project", "Hours", "Revisions", "Experience", "Overhead", "Summary"],
   scope: ["Project", "Screens", "Platform", "Complexity", "System", "UX", "Revisions", "Experience", "Overhead", "Summary"],
-  ai:    ["Project", "Brief", "AI Review", "Platform", "Complexity", "System", "UX", "Revisions", "Experience", "Overhead", "Summary"],
+
 };
 
 function FlowRoadmap({ mode, flowStep }: any) {
@@ -2492,20 +2296,19 @@ function FairScopeEstimator() {
   const [state,      setState]     = useState(INIT_STATE);
   const [screen,     setScreen]    = useState("entry");
   const [flowStep,   setFlowStep]  = useState(1);
-  const [aiStatus,   setAiStatus]  = useState("idle");   // idle | loading | error
   const [sheetOpen,  setSheetOpen] = useState(false);
   const topRef = useRef(null);
 
   const upd = useCallback(patch => setState(s => ({ ...s, ...patch })), []);
   const top  = useCallback(() => { setTimeout(() => topRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 40); }, []);
 
-  const totalSteps = state.mode === "quick" ? 6 : state.mode === "ai" ? 11 : 10;
+  const totalSteps = state.mode === "quick" ? 6 : 10;
   const pct = screen === "results" ? 100 : screen === "entry" ? 0 : ((flowStep - 1) / totalSteps) * 100;
   const stepMeta = screen === "flow" ? `Step ${flowStep} of ${totalSteps}` : screen === "results" ? "Complete" : "";
 
   function goStep(n) { setFlowStep(n); top(); }
   function next() {
-    const steps = state.mode === "quick" ? 6 : state.mode === "ai" ? 11 : 10;
+    const steps = state.mode === "quick" ? 6 : 10;
     if (flowStep >= steps) { setScreen("results"); top(); }
     else goStep(flowStep + 1);
   }
@@ -2525,51 +2328,13 @@ function FairScopeEstimator() {
     setState(INIT_STATE);
     setScreen("entry");
     setFlowStep(1);
-    setAiStatus("idle");
     top();
   }
 
   function showResults() { setScreen("results"); top(); }
 
-  async function runAI(desc) {
-    setAiStatus("done"); goStep(3);
-    const pt = PROJECT_TYPES.find(p => p.id === state.projectType)?.label || "product";
-    const prompt = `You are a senior UX designer scoping a ${pt} project. Analyse this description and extract design scope:
-"${desc}"
 
-Return ONLY valid JSON with no markdown, no preamble:
-{
-  "primaryScreens": [{"name":"","reason":""}],
-  "secondaryScreens": [{"name":"","reason":""}],
-  "keyFlows": [""],
-  "coreFeatures": [""]
-}
-
-Rules:
-- Primary screens: distinct full-page views requiring full design effort
-- Secondary screens: modals, drawers, empty states, error screens, minor variants (1.5 hrs each)
-- Be conservative and realistic for a professional estimate
-- 3-5 key flows, 4-7 core features
-- Max 18 primary, 12 secondary`;
-
-    try {
-      const res = await fetch('/api/analyze', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt }),
-      });
-      const data = await res.json();
-      const text = data.text || '';
-      const clean = text.replace(/```json|```/g, '').trim();
-      let analysis; try { analysis = JSON.parse(clean); } catch(e) { analysis = { raw: clean }; }
-      upd({ aiAnalysis: analysis, _aiRemovedP: [], _aiRemovedS: [] });
-      setAiStatus("done");
-      goStep(3); // AI confirm step
-    } catch (e) {
-      setAiStatus("error");
-      goStep(2); // back to description
     }
-  }
 
   // ── QUICK FLOW STEPS ──────────────────────────────────────────────────────
   const QUICK_STEPS = [
@@ -2595,33 +2360,9 @@ Rules:
     () => <StepSustainability state={state} onUpdate={upd} onNext={showResults} onBack={back} />,
   ];
 
-  // ── AI FLOW STEPS ─────────────────────────────────────────────────────────
-  const AI_STEPS = [
-    () => <StepProjectType state={state} onUpdate={upd} onNext={next} onBack={back} />,
-    () => (
-      aiStatus === "error"
-        ? <div className="screen">
-            <Back onClick={back} />
-            <div className="warn-box" style={{ marginTop: 24 }}>Analysis failed. Check your connection and try again.</div>
-            <PrimaryBtn onClick={() => setAiStatus("idle")}>Try Again</PrimaryBtn>
-            <OutlineBtn onClick={() => { upd({ mode: "scope" }); setState(s => ({ ...s, mode: "scope" })); setFlowStep(2); }}>Enter screens manually</OutlineBtn>
-          </div>
-        : <StepAIDescription state={state} onUpdate={upd} onAnalyse={runAI} onSkip={() => { upd({ mode: "scope" }); setFlowStep(2); }} onBack={back} />
-    ),
-    () => aiStatus === "loading"
-      ? <StepAILoading />
-      : <StepAIConfirm state={state} onUpdate={upd} onNext={next} onBack={() => { setAiStatus("idle"); goStep(2); }} />,
-    () => <StepPlatform       state={state} onUpdate={upd} onNext={next} onBack={back} />,
-    () => <StepFlowComplexity state={state} onUpdate={upd} onNext={next} onBack={back} />,
-    () => <StepDesignSystem   state={state} onUpdate={upd} onNext={next} onBack={back} />,
-    () => <StepUXActivities   state={state} onUpdate={upd} onNext={next} onBack={back} />,
-    () => <StepRevisions      state={state} onUpdate={upd} onNext={next} onBack={back} />,
-    () => <StepExperience     state={state} onUpdate={upd} onNext={next} onBack={back} isFinal={false} />,
-    () => <StepPMOverhead     state={state} onUpdate={upd} onNext={next} onBack={back} />,
-    () => <StepSustainability state={state} onUpdate={upd} onNext={showResults} onBack={back} />,
-  ];
 
-  const STEPS = state.mode === "quick" ? QUICK_STEPS : state.mode === "ai" ? AI_STEPS : SCOPE_STEPS;
+
+  const STEPS = state.mode === "quick" ? QUICK_STEPS : SCOPE_STEPS;
   const currentStepFn = STEPS[flowStep - 1];
 
   return (
@@ -2680,7 +2421,3 @@ Rules:
 export default function FairScope() {
   return <FairScopeEstimator />;
 }
-
-
-
-
