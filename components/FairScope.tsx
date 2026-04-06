@@ -2754,7 +2754,6 @@ function FairScopeEstimator() {
             {screen === "flow"    && currentStepFn && currentStepFn()}
             {screen === "results" && <ResultsScreen state={state} onRestart={restart} onEdit={goEdit} />}
           </div>
-          <MakerFooter />
         </div>
 
         <aside className="sidebar">
