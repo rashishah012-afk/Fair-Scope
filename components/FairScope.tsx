@@ -3,9 +3,19 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// CONSTANTS & DATA
+// CONSTANTS & DATA — SHARED
 // ─────────────────────────────────────────────────────────────────────────────
 
+// ── ROLES ────────────────────────────────────────────────────────────────────
+// NEW: Role selector shown before mode selection
+const ROLES = [
+  { id: "product",  label: "Product Designer",  sub: "UI/UX · Apps · Dashboards",      icon: "◈" },
+  { id: "graphic",  label: "Graphic Designer",   sub: "Print · Social · Campaigns",     icon: "▣" },
+  { id: "branding", label: "Branding Designer",  sub: "Identity · Strategy · Systems",  icon: "◎" },
+  { id: "video",    label: "Video Editor",        sub: "Reels · Docs · Brand Films",     icon: "▶" },
+];
+
+// ── PRODUCT DESIGN (UNCHANGED) ───────────────────────────────────────────────
 const PROJECT_TYPES = [
   { id: "landing",   label: "Landing Page",       sub: "Single-page, conversion-focused",   icon: "◈" },
   { id: "website",   label: "Multi-page Website",  sub: "5–15 pages, full structure",        icon: "▤" },
@@ -75,15 +85,269 @@ const UX_GROUPS = [
 const ALL_UX_ITEMS = UX_GROUPS.flatMap(g => g.items);
 
 const PM_OVERHEAD = [
-  { id: "none",     label: "None",     sub: "No overhead",                    pct: 0    },
-  { id: "light",    label: "Light",    sub: "Occasional check-ins  (+10%)",   pct: 0.10 },
-  { id: "standard", label: "Standard", sub: "Regular meetings & reviews (+15%)", pct: 0.15 },
-  { id: "heavy",    label: "Heavy",    sub: "Intensive coordination  (+20%)", pct: 0.20 },
+  { id: "none",     label: "Not applicable",      sub: "Solo execution, no client coordination",      pct: 0    },
+  { id: "light",    label: "Minimal coordination", sub: "Async updates, 1–2 check-ins (+10%)",        pct: 0.10 },
+  { id: "standard", label: "Active management",   sub: "Scheduled reviews, feedback rounds (+15%)",  pct: 0.15 },
+  { id: "heavy",    label: "Full oversight",       sub: "Daily alignment, stakeholder management (+20%)", pct: 0.20 },
 ];
 
-const UTILIZATION_DEFAULT   = 0.75;   // 75% of hours are billable
-const FREELANCE_MULT_DEFAULT = 1.05;  // 5% premium over salaried equivalent
-const GST_RATE               = 0.18;  // 18% Indian GST
+// ─────────────────────────────────────────────────────────────────────────────
+// CONSTANTS — GRAPHIC DESIGN
+// ─────────────────────────────────────────────────────────────────────────────
+
+// "Screens" → "Deliverables" (primaryScreens = primary count, secondaryScreens = secondary count)
+// primaryScreens  = complex deliverables (e.g. poster, brochure, banner set) → 3 hrs each
+// secondaryScreens = simple deliverables (social cards, icons, resizes)       → 1 hr each
+
+// REBALANCED v2 — complexity is the ONLY multiplier (×1.0–1.3 max)
+// Brand alignment converted to flat hours (+2 hrs if no guidelines)
+const GRAPHIC_COMPLEXITY = [
+  { id: "simple",   label: "Simple",   sub: "Flat graphics, minimal elements",        mult: 1.0,  tag: "×1.0"  },
+  { id: "moderate", label: "Moderate", sub: "Layered layouts, typography play",       mult: 1.15, tag: "×1.15" },
+  { id: "complex",  label: "Complex",  sub: "Illustration, custom art, rich detail",  mult: 1.3,  tag: "×1.3"  },
+];
+
+// "Platform" → "Brand Alignment" — now flat hours, not a multiplier
+const GRAPHIC_BRAND_ALIGNMENT = [
+  { id: "single", label: "Brand Guidelines Provided", sub: "Styles defined · faster execution",       flatHrs: 0 },
+  { id: "multi",  label: "Brand to be Developed",     sub: "No guidelines · +2 hrs creative setup",   flatHrs: 2 },
+];
+
+// "UX Activities" → "Add-ons" for graphic work — expanded with full industry options
+const GRAPHIC_ADDON_GROUPS = [
+  {
+    id: "production", label: "Production & Delivery",
+    items: [
+      { id: "copywriting",    label: "Copywriting",              sub: "+2 hrs",   hrs: 2   },
+      { id: "resizing",       label: "Multi-size Exports",       sub: "+1 hr",    hrs: 1   },
+      { id: "print_setup",    label: "Print Setup / Bleed",      sub: "+1.5 hrs", hrs: 1.5 },
+      { id: "file_handoff",   label: "Organised File Handoff",   sub: "+1 hr",    hrs: 1   },
+      { id: "source_files",   label: "Source File Prep",         sub: "+1 hr",    hrs: 1   },
+    ],
+  },
+  {
+    id: "digital", label: "Digital & Social",
+    items: [
+      { id: "social_set",     label: "Social Media Template Set",sub: "+3 hrs",   hrs: 3   },
+      { id: "email_template", label: "Email Banner / Template",  sub: "+2 hrs",   hrs: 2   },
+      { id: "story_reels",    label: "Reels / Stories Format",   sub: "+1.5 hrs", hrs: 1.5 },
+      { id: "animated_gif",   label: "Animated GIF / Loop",      sub: "+3 hrs",   hrs: 3   },
+      { id: "web_banner",     label: "Web Banner Set",           sub: "+2 hrs",   hrs: 2   },
+    ],
+  },
+  {
+    id: "strategy", label: "Strategy & Concepts",
+    items: [
+      { id: "moodboard",      label: "Moodboard / Stylescape",   sub: "+2 hrs",   hrs: 2   },
+      { id: "concepts",       label: "Multiple Concepts (×2)",   sub: "+3 hrs",   hrs: 3   },
+      { id: "presentation",   label: "Client Presentation Deck", sub: "+2 hrs",   hrs: 2   },
+      { id: "art_direction",  label: "Art Direction Notes",      sub: "+1.5 hrs", hrs: 1.5 },
+      { id: "brand_audit",    label: "Visual Brand Audit",       sub: "+2 hrs",   hrs: 2   },
+    ],
+  },
+  {
+    id: "packaging", label: "Packaging & Print",
+    items: [
+      { id: "packaging",      label: "Packaging Design",         sub: "+4 hrs",   hrs: 4   },
+      { id: "label_design",   label: "Label / Tag Design",       sub: "+2 hrs",   hrs: 2   },
+      { id: "brochure",       label: "Brochure / Leaflet Layout",sub: "+3 hrs",   hrs: 3   },
+      { id: "menu_design",    label: "Menu Design",              sub: "+2 hrs",   hrs: 2   },
+    ],
+  },
+];
+
+const ALL_GRAPHIC_ADDONS = GRAPHIC_ADDON_GROUPS.flatMap(g => g.items);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CONSTANTS — BRANDING DESIGN
+// ─────────────────────────────────────────────────────────────────────────────
+
+// REBALANCED v2:
+// primaryScreens  = core brand deliverables → 10 hrs each (logo suite ~10 hrs realistic)
+// secondaryScreens = extended assets → 3 hrs each (templates, stationery)
+
+// "Flow Complexity" → Strategy Depth — ONLY multiplier kept
+const BRANDING_STRATEGY = [
+  { id: "simple",   label: "Execution Only",    sub: "Brief is defined, jump straight to design",  mult: 1.0,  tag: "×1.0"  },
+  { id: "moderate", label: "Strategy + Design", sub: "Brand positioning + discovery included",     mult: 1.25, tag: "×1.25" },
+  { id: "complex",  label: "Full Strategy",     sub: "Research, positioning, naming, full system", mult: 1.5,  tag: "×1.5"  },
+];
+
+// "Platform" → Brand Scope — converted to flat hours (+5 hrs for print), not a multiplier
+const BRANDING_SCOPE = [
+  { id: "single", label: "Digital Only",     sub: "Online brand assets · screen-first",        flatHrs: 0 },
+  { id: "multi",  label: "Digital + Print",  sub: "Full brand across media · +5 hrs print prep", flatHrs: 5 },
+];
+
+// "UX Activities" → Branding Add-ons — rebalanced to realistic flat hours
+const BRANDING_ADDON_GROUPS = [
+  {
+    id: "core", label: "Core Deliverables",
+    items: [
+      { id: "brand_guide",  label: "Brand Guidelines Doc",    sub: "+6 hrs",  hrs: 6  },
+      { id: "brand_story",  label: "Brand Story / Narrative", sub: "+3 hrs",  hrs: 3  },
+      { id: "naming",       label: "Naming & Tagline",        sub: "+4 hrs",  hrs: 4  },
+    ],
+  },
+  {
+    id: "assets", label: "Brand Assets",
+    items: [
+      { id: "icon_set",    label: "Custom Icon Set",           sub: "+5 hrs",  hrs: 5  },
+      { id: "photography", label: "Photography Art Direction", sub: "+3 hrs",  hrs: 3  },
+      { id: "motion_logo", label: "Animated Logo",            sub: "+4 hrs",  hrs: 4  },
+    ],
+  },
+  {
+    id: "strategy_add", label: "Strategy Add-ons",
+    items: [
+      { id: "competitor_b", label: "Competitor Audit",                   sub: "+3 hrs", hrs: 3  },
+      { id: "archetype",    label: "Brand Archetype Workshop",           sub: "+3 hrs", hrs: 3  },
+      { id: "style_alts",   label: "Alternative Style Directions (×3)", sub: "+6 hrs", hrs: 6  },
+    ],
+  },
+];
+
+const ALL_BRANDING_ADDONS = BRANDING_ADDON_GROUPS.flatMap(g => g.items);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CONSTANTS — VIDEO EDITING
+// ─────────────────────────────────────────────────────────────────────────────
+
+// "Primary Screens" → Output Duration (minutes)
+// "Secondary Screens" → Raw Footage Hours
+
+// "Platform" → Footage-to-Output Ratio Multiplier
+const VIDEO_FOOTAGE_RATIO = [
+  { id: "single", label: "Light Footage  (1–3× output)", sub: "Short brand clips, interviews with script", mult: 1.0 },
+  { id: "multi",  label: "Heavy Footage  (4–10× output)", sub: "Events, documentaries, long-form · +30%",  mult: 1.3 },
+];
+
+// "Flow Complexity" → Editing Complexity
+const VIDEO_COMPLEXITY = [
+  { id: "simple",   label: "Basic Cut",       sub: "Linear edit, minimal graphics",         mult: 1.0, tag: "×1.0" },
+  { id: "moderate", label: "Motion & Grade",  sub: "B-roll, titles, basic color grade",     mult: 1.3, tag: "×1.3" },
+  { id: "complex",  label: "Full Production", sub: "Complex transitions, VFX, sound design", mult: 1.6, tag: "×1.6" },
+];
+
+// "UX Activities" → Video Add-ons
+const VIDEO_ADDON_GROUPS = [
+  {
+    id: "post", label: "Post-Production Add-ons",
+    items: [
+      { id: "subtitles",    label: "Subtitles / Captions",   sub: "+2 hrs per 5 min output",  hrs: 2 },
+      { id: "color_grade",  label: "Professional Color Grade", sub: "+3 hrs",                 hrs: 3 },
+      { id: "sound_design", label: "Sound Design / Mix",      sub: "+4 hrs",                  hrs: 4 },
+    ],
+  },
+  {
+    id: "delivery", label: "Delivery Add-ons",
+    items: [
+      { id: "multi_format", label: "Multi-platform Exports",  sub: "16:9 + 9:16 + 1:1 · +2 hrs", hrs: 2 },
+      { id: "thumbnail",    label: "Thumbnail Design",        sub: "+2 hrs",                  hrs: 2 },
+      { id: "scriptwriting",label: "Scriptwriting",           sub: "+5 hrs",                  hrs: 5 },
+    ],
+  },
+];
+
+const ALL_VIDEO_ADDONS = VIDEO_ADDON_GROUPS.flatMap(g => g.items);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SHARED CONSTANTS
+// ─────────────────────────────────────────────────────────────────────────────
+
+const UTILIZATION_DEFAULT    = 0.75;
+const FREELANCE_MULT_DEFAULT = 1.05;
+const GST_RATE               = 0.18;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PROJECT LEVEL — adjustment layer for non-product roles only
+// ─────────────────────────────────────────────────────────────────────────────
+//
+//  Three levers, applied AFTER the role-specific hour engine runs:
+//    baseHrsMult  → scales the raw deliverable base hours (before multipliers)
+//    addonScale   → scales add-on flat hours (e.g. Basic treats addons as lighter)
+//    bufferMult   → replaces the role's default ops buffer %
+//
+//  Rate anchor: Basic uses rateMin, Standard uses (rateMin+rate)/2, Premium uses rate
+//  This means level controls BOTH hours AND rate — the two biggest pricing levers.
+//
+//  Premium = current rebalanced logic (all mults = 1.0, no change to calibrated values).
+//  Product design is not affected by this constant at all.
+
+const PROJECT_LEVELS = [
+  {
+    id:          "basic",
+    label:       "Basic",
+    sub:         "Quick turnaround, simple brief, price-sensitive client",
+    icon:        "·",
+    // Hours: lighter base, addons at 60%, minimal buffer
+    baseHrsMult: 0.7,   // deliverable base × 0.7 (quicker execution assumed)
+    addonScale:  0.6,   // add-on hrs × 0.6 (simpler versions of each add-on)
+    bufferMult:  0.05,  // ops buffer = 5% (very lean)
+    // Rate: use rateMin as the pricing anchor
+    rateAnchor:  "min",
+    // Revision cap: 1 cycle at 4%
+    revCycles:   1,
+    revPct:      0.04,
+    tag:         "Budget-friendly",
+  },
+  {
+    id:          "standard",
+    label:       "Standard",
+    sub:         "Typical freelance project, clear scope, professional output",
+    icon:        "◆",
+    // Hours: current calibrated base (no scaling), addons at 85%
+    baseHrsMult: 1.0,
+    addonScale:  0.85,
+    bufferMult:  0.08,  // same as current graphic default
+    // Rate: midpoint between rateMin and rate midpoint
+    rateAnchor:  "mid-low",
+    revCycles:   2,
+    revPct:      0.05,
+    tag:         "Most common",
+  },
+  {
+    id:          "premium",
+    label:       "Premium",
+    sub:         "High-polish work, senior expectations, agency-grade output",
+    icon:        "◈",
+    // Hours: premium adds 20% to base (more iteration assumed), full addons
+    baseHrsMult: 1.2,
+    addonScale:  1.0,
+    bufferMult:  0.10,  // current branding buffer — highest for premium
+    // Rate: full rate midpoint (current behavior)
+    rateAnchor:  "mid",
+    revCycles:   2,
+    revPct:      0.08,
+    tag:         "Agency-grade",
+  },
+];
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ARCHITECTURE NOTE (inline, for developer clarity)
+// ─────────────────────────────────────────────────────────────────────────────
+//
+//  calcEstimate(state)
+//    └─ if role === "product"   → existing product logic (UNCHANGED)
+//    └─ if role === "graphic"   → calcHoursGraphic(state)  → designHrs + scopeRows
+//    └─ if role === "branding"  → calcHoursBranding(state) → designHrs + scopeRows
+//    └─ if role === "video"     → calcHoursVideo(state)    → designHrs + scopeRows
+//
+//  All roles share the SAME cost / pricing layers after designHrs is set:
+//    effRate = midRate / utilization
+//    designCost = designHrs × effRate
+//    pmCost = designCost × pmPct
+//    total = (designCost + pmCost) × freeMult [+ GST]
+//
+//  UI field mappings per role:
+//    "Primary Screens"    → Graphic: complex deliverables | Branding: core deliverables | Video: output minutes
+//    "Secondary Screens"  → Graphic: simple deliverables  | Branding: extended assets   | Video: raw footage hrs
+//    "Platform"           → Graphic: brand alignment      | Branding: brand scope        | Video: footage ratio
+//    "Flow Complexity"    → Graphic: visual complexity    | Branding: strategy depth     | Video: edit complexity
+//    "Design System"      → (not used for non-product; defaulted to "none")
+//    "UX Activities"      → Graphic: graphic add-ons      | Branding: brand add-ons      | Video: video add-ons
+//
+// ─────────────────────────────────────────────────────────────────────────────
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CALCULATION ENGINE
@@ -100,94 +364,373 @@ function inr(n) {
   return "₹" + Math.round(n).toLocaleString("en-IN");
 }
 
+// ── GRAPHIC DESIGN HOURS ENGINE — REBALANCED v2 + PROJECT LEVEL ──────────────
+//
+//  projectLevel controls:
+//    lv.baseHrsMult  → scales deliverable base hours before complexity mult
+//    lv.addonScale   → scales add-on flat hours
+//    lv.bufferMult   → overrides the ops buffer %
+//    lv.revCycles    → caps revision cycles
+//    lv.revPct       → revision % per cycle
+//
+//  FLOW:
+//  1. complexBase = primaryScreens × 1.5 × lv.baseHrsMult
+//  2. simpleBase  = secondaryScreens × 0.5 × lv.baseHrsMult
+//  3. afterCX     = (complexBase + simpleBase) × cx  (complexity — ONLY multiplier)
+//  4. brandFlat   stays flat hrs (not scaled — it's a setup cost, not deliverable effort)
+//  5. addonHrs    = SUM(addons) × lv.addonScale
+//  6. scopeBase   = afterCX + brandFlat + addonHrs
+//  7. revHrs      = scopeBase × (lv.revCycles × lv.revPct)
+//  8. bufHrs      = (scopeBase + revHrs) × lv.bufferMult
+//  9. designHrs   = scopeBase + revHrs + bufHrs
+//
+function calcHoursGraphic(s) {
+  const lv        = PROJECT_LEVELS.find(l => l.id === (s.projectLevel || "standard")) || PROJECT_LEVELS[1];
+  const cx        = GRAPHIC_COMPLEXITY.find(f => f.id === s.flowComplexity)?.mult || 1.0;
+  const brandFlat = GRAPHIC_BRAND_ALIGNMENT.find(p => p.id === s.platform)?.flatHrs ?? 0;
+  const rawAddons = s.uxActivities.reduce(
+    (sum, id) => sum + (ALL_GRAPHIC_ADDONS.find(u => u.id === id)?.hrs || 0), 0
+  );
+  const addonHrs  = rawAddons * lv.addonScale;
+
+  const complexBase = (s.primaryScreens  || 0) * 1.5 * lv.baseHrsMult;
+  const simpleBase  = (s.secondaryScreens || 0) * 0.5 * lv.baseHrsMult;
+  const screenBase  = complexBase + simpleBase;
+  const afterCX     = screenBase * cx;
+  const cxAdj       = afterCX - screenBase;
+
+  const scopeBase   = afterCX + brandFlat + addonHrs;
+  const revHrs      = scopeBase * (lv.revCycles * lv.revPct);
+  const bufHrs      = (scopeBase + revHrs) * lv.bufferMult;
+  const designHrs   = scopeBase + revHrs + bufHrs;
+
+  const lvLabel = `${lv.label} level`;
+  const scopeRows: any[] = [
+    { label: `Complex deliverables (${s.primaryScreens} × ${(1.5 * lv.baseHrsMult).toFixed(1)} hrs)`, note: `${complexBase.toFixed(1)} hrs`, hrs: complexBase },
+    { label: `Simple deliverables (${s.secondaryScreens} × ${(0.5 * lv.baseHrsMult).toFixed(1)} hr)`,  note: `${simpleBase.toFixed(1)} hrs`,  hrs: simpleBase  },
+  ];
+  if (cx > 1)        scopeRows.push({ label: `Visual complexity (×${cx})`,             note: `+${(cxAdj).toFixed(1)} hrs`,    hrs: cxAdj    });
+  if (brandFlat > 0) scopeRows.push({ label: `Brand setup (no guidelines)`,            note: `+${brandFlat} hrs`,             hrs: brandFlat });
+  if (addonHrs > 0)  scopeRows.push({ label: `Add-ons · ${lvLabel} (×${lv.addonScale})`, note: `+${addonHrs.toFixed(1)} hrs`, hrs: addonHrs });
+  scopeRows.push({ label: `Revisions (${lv.revCycles} × ${Math.round(lv.revPct * 100)}%)`, note: `+${revHrs.toFixed(1)} hrs`, hrs: revHrs });
+  scopeRows.push({ label: `Ops buffer (${Math.round(lv.bufferMult * 100)}%)`,              note: `+${bufHrs.toFixed(1)} hrs`, hrs: bufHrs });
+
+  const hrsDetail = {
+    complexBase: +complexBase.toFixed(1),
+    simpleBase:  +simpleBase.toFixed(1),
+    addonHrs:    +addonHrs.toFixed(1),
+    revHrs:      +revHrs.toFixed(1),
+    bufHrs:      +bufHrs.toFixed(1),
+  };
+
+  return { designHrs, scopeRows, hrsDetail };
+}
+
+// ── BRANDING DESIGN HOURS ENGINE — REBALANCED v2 + PROJECT LEVEL ─────────────
+//
+//  projectLevel controls same levers as graphic:
+//    lv.baseHrsMult  → scales core + extended deliverable base hrs
+//    lv.addonScale   → scales add-on flat hours
+//    lv.bufferMult   → overrides ops buffer %
+//    lv.revCycles / lv.revPct → revision parameters
+//
+//  FLOW:
+//  1. coreBase     = primaryScreens × 10 × lv.baseHrsMult
+//  2. extendedBase = secondaryScreens × 3 × lv.baseHrsMult
+//  3. afterStrategy = (coreBase + extendedBase) × st  (strategy depth — ONLY multiplier)
+//  4. scopeFlat    stays flat hrs (print setup cost, not scaled)
+//  5. addonHrs     = SUM(addons) × lv.addonScale
+//  6. scopeBase    = afterStrategy + scopeFlat + addonHrs
+//  7. revHrs       = scopeBase × (lv.revCycles × lv.revPct)
+//  8. bufHrs       = (scopeBase + revHrs) × lv.bufferMult
+//  9. designHrs    = scopeBase + revHrs + bufHrs
+//
+function calcHoursBranding(s) {
+  const lv        = PROJECT_LEVELS.find(l => l.id === (s.projectLevel || "standard")) || PROJECT_LEVELS[1];
+  const st        = BRANDING_STRATEGY.find(f => f.id === s.flowComplexity)?.mult || 1.0;
+  const scopeFlat = BRANDING_SCOPE.find(p => p.id === s.platform)?.flatHrs ?? 0;
+  const rawAddons = s.uxActivities.reduce(
+    (sum, id) => sum + (ALL_BRANDING_ADDONS.find(u => u.id === id)?.hrs || 0), 0
+  );
+  const addonHrs  = rawAddons * lv.addonScale;
+
+  const coreBase      = (s.primaryScreens  || 0) * 10 * lv.baseHrsMult;
+  const extendedBase  = (s.secondaryScreens || 0) * 3  * lv.baseHrsMult;
+  const delivBase     = coreBase + extendedBase;
+
+  const afterStrategy = delivBase * st;
+  const stAdj         = afterStrategy - delivBase;
+
+  const scopeBase     = afterStrategy + scopeFlat + addonHrs;
+  const revHrs        = scopeBase * (lv.revCycles * lv.revPct);
+  const bufHrs        = (scopeBase + revHrs) * lv.bufferMult;
+  const designHrs     = scopeBase + revHrs + bufHrs;
+
+  const lvLabel = `${lv.label} level`;
+  const scopeRows: any[] = [
+    { label: `Core brand deliverables (${s.primaryScreens} × ${(10 * lv.baseHrsMult).toFixed(0)} hrs)`,  note: `${coreBase.toFixed(0)} hrs`,     hrs: coreBase     },
+    { label: `Extended brand assets (${s.secondaryScreens} × ${(3 * lv.baseHrsMult).toFixed(1)} hrs)`,   note: `${extendedBase.toFixed(1)} hrs`, hrs: extendedBase },
+  ];
+  if (st > 1)        scopeRows.push({ label: `Strategy depth (×${st})`,                note: `+${stAdj.toFixed(0)} hrs`,      hrs: stAdj    });
+  if (scopeFlat > 0) scopeRows.push({ label: `Print scope preparation`,                note: `+${scopeFlat} hrs`,             hrs: scopeFlat });
+  if (addonHrs > 0)  scopeRows.push({ label: `Add-ons · ${lvLabel} (×${lv.addonScale})`, note: `+${addonHrs.toFixed(1)} hrs`, hrs: addonHrs });
+  scopeRows.push({ label: `Revisions (${lv.revCycles} × ${Math.round(lv.revPct * 100)}%)`, note: `+${revHrs.toFixed(1)} hrs`, hrs: revHrs });
+  scopeRows.push({ label: `Ops buffer (${Math.round(lv.bufferMult * 100)}%)`,              note: `+${bufHrs.toFixed(1)} hrs`, hrs: bufHrs });
+
+  const hrsDetail = {
+    coreBase:      +coreBase.toFixed(0),
+    extendedBase:  +extendedBase.toFixed(1),
+    addonHrs:      +addonHrs.toFixed(1),
+    revHrs:        +revHrs.toFixed(1),
+    bufHrs:        +bufHrs.toFixed(1),
+  };
+
+  return { designHrs, scopeRows, hrsDetail };
+}
+
+// ── VIDEO EDITING HOURS ENGINE ───────────────────────────────────────────────
+//
+//  PSEUDOCODE (calcHoursVideo):
+//  ─────────────────────────────
+//  INPUT: primaryScreens (output duration in minutes), secondaryScreens (raw footage hrs),
+//         platform (footage ratio mult), flowComplexity (edit complexity mult),
+//         uxActivities (video add-on IDs), revisions
+//
+//  1. BASE EFFORT: outputMins × 1.5 hrs/min (editing takes ~1.5 hrs per output minute)
+//  2. footageAdj  = If heavy footage: secondaryScreens × 0.5 (each raw footage hr adds effort)
+//  3. durationBase = outputMins × 1.5 + footageAdj
+//  4. afterRatio   = durationBase × VIDEO_FOOTAGE_RATIO[platform].mult
+//  5. afterCX      = afterRatio   × VIDEO_COMPLEXITY[flowComplexity].mult
+//  6. addonHrs     = SUM(selected uxActivities hrs from ALL_VIDEO_ADDONS)
+//  7. scopeBase    = afterCX + addonHrs
+//  8. revHrs       = scopeBase × (revisions × 0.10)
+//  9. bufHrs       = (scopeBase + revHrs) × 0.15
+//  10. designHrs   = scopeBase + revHrs + bufHrs
+//
+function calcHoursVideo(s) {
+  const fr   = VIDEO_FOOTAGE_RATIO.find(p => p.id === s.platform)?.mult || 1.0;
+  const cx   = VIDEO_COMPLEXITY.find(f => f.id === s.flowComplexity)?.mult || 1.3;
+  const addonHrs = s.uxActivities.reduce(
+    (sum, id) => sum + (ALL_VIDEO_ADDONS.find(u => u.id === id)?.hrs || 0), 0
+  );
+
+  const outputMins    = s.primaryScreens  || 0;   // reused as "output duration (minutes)"
+  const rawFootageHrs = s.secondaryScreens || 0;  // reused as "raw footage hours"
+
+  const durationBase  = outputMins * 1.5;                // 1.5 hrs editing per output minute
+  const footageAdj    = rawFootageHrs * 0.5;             // 0.5 hrs per raw footage hour
+  const baseHrs       = durationBase + footageAdj;
+  const afterRatio    = baseHrs * fr;
+  const afterCX       = afterRatio * cx;
+  const scopeBase     = afterCX + addonHrs;
+  const revHrs        = scopeBase * (s.revisions * 0.10);
+  const bufHrs        = (scopeBase + revHrs) * 0.15;
+  const designHrs     = scopeBase + revHrs + bufHrs;
+
+  const frAdj = afterRatio - baseHrs;
+  const cxAdj = afterCX - afterRatio;
+
+  const scopeRows = [
+    { label: `Output duration (${outputMins} min × 1.5 hrs/min)`,     note: `${durationBase} hrs`,              hrs: durationBase },
+  ];
+  if (rawFootageHrs > 0) scopeRows.push({ label: `Raw footage overhead (${rawFootageHrs} hrs × 0.5)`, note: `+${footageAdj} hrs`, hrs: footageAdj });
+  if (fr > 1)       scopeRows.push({ label: "Heavy footage ratio (+30%)",         note: `+${Math.round(frAdj)} hrs`, hrs: frAdj   });
+  if (cx > 1)       scopeRows.push({ label: `Edit complexity (×${cx})`,          note: `+${Math.round(cxAdj)} hrs`, hrs: cxAdj   });
+  if (addonHrs > 0) scopeRows.push({ label: `Video add-ons (+${addonHrs} hrs)`,  note: `+${addonHrs} hrs`,          hrs: addonHrs });
+  scopeRows.push({ label: `Revisions (${s.revisions} × 10%)`, note: `+${Math.round(revHrs)} hrs`, hrs: revHrs });
+  scopeRows.push({ label: "Operational buffer (15%)",          note: `+${Math.round(bufHrs)} hrs`, hrs: bufHrs });
+
+  const hrsDetail = {
+    durationBase,
+    footageAdj,
+    addonHrs,
+    revHrs: Math.round(revHrs),
+    bufHrs: Math.round(bufHrs),
+  };
+
+  return { designHrs, scopeRows, hrsDetail };
+}
+
+// ── UNIFIED CALCULATION ENGINE ────────────────────────────────────────────────
+// This is the ONLY function that the app calls. It dispatches by role.
+// Product design logic is completely unchanged — just wrapped in a role guard.
+
 function calcEstimate(s) {
-  // ── RATES & SUSTAINABILITY PARAMS ────────────────────────────────────────
   const expLevel    = EXPERIENCE_LEVELS.find(e => e.id === s.experience);
-  const midRate     = expLevel?.rate     || 2750;            // midpoint of market range
-  const maxRate     = expLevel?.rateMax  || midRate * 1.45;  // top of range (for high estimate)
+  const role        = s.role || "product";
+  const lv          = PROJECT_LEVELS.find(l => l.id === (s.projectLevel || "standard")) || PROJECT_LEVELS[1];
+
+  // Product design: completely unchanged rate logic.
+  // Non-product roles: rate anchor is driven by projectLevel.
+  //   Basic    → rateMin  (lower bound — budget clients, quick jobs)
+  //   Standard → (rateMin + rate) / 2  (realistic middle ground)
+  //   Premium  → rate midpoint (full market midpoint — current behavior)
+  // Max rate for range ceiling: one bracket above midRate in all non-product cases.
+  let midRate: number;
+  let maxRate: number;
+  if (role === "product") {
+    midRate = expLevel?.rate    || 2750;
+    maxRate = expLevel?.rateMax || midRate * 1.45;
+  } else {
+    const rMin = expLevel?.rateMin || 800;
+    const rMid = expLevel?.rate    || 2750;
+    if (lv.rateAnchor === "min") {
+      midRate = rMin;
+      maxRate = rMid;                           // low: rateMin, high: midpoint
+    } else if (lv.rateAnchor === "mid-low") {
+      midRate = Math.round((rMin + rMid) / 2);
+      maxRate = rMid;                           // low: halfway, high: midpoint
+    } else {
+      // "mid" = Premium: same as previous v2 behavior
+      midRate = rMid;
+      maxRate = expLevel?.rateMax || rMid * 1.45;
+    }
+  }
+
   const utilization = s.utilizationRate  ?? UTILIZATION_DEFAULT;
   const freeMult    = s.freelanceMult    ?? FREELANCE_MULT_DEFAULT;
   const pmPct       = PM_OVERHEAD.find(p => p.id === (s.pmOverhead || "standard"))?.pct ?? 0.15;
 
-  // Effective rate = base ÷ utilization (covers non-billable time)
+  // Custom rate override: if the freelancer has set their own ₹/hr,
+  // derive a professional range around it: low = custom rate (after utilization),
+  // high = custom rate × 1.2 (accounts for premium positioning / complexity variance).
+  // This gives a meaningful range instead of a flat single value.
+  if (s.customRate && Number(s.customRate) > 0) {
+    const cr = Number(s.customRate);
+    midRate  = cr;
+    maxRate  = Math.round(cr * 1.20); // +20% spread for the upper estimate
+  }
+
   const effRateMid = midRate / utilization;
   const effRateMax = maxRate / utilization;
 
-  // ── COMPUTE DESIGN HOURS (shared by both modes) ───────────────────────
   let designHrs, hrsDetail, scopeRows;
 
-  if (s.mode === "quick") {
-    const base   = Number(s.hours) || 0;
-    const revHrs = base * (s.revisions * 0.10);
-    const bufHrs = (base + revHrs) * 0.15;
-    designHrs    = base + revHrs + bufHrs;
-    hrsDetail    = { base, revHrs: Math.round(revHrs), bufHrs: Math.round(bufHrs) };
-    scopeRows    = [
-      { label: "Your estimated hours",              note: `${base} hrs`,               hrs: base   },
-      { label: `Revisions (${s.revisions} × 10%)`,  note: `+${Math.round(revHrs)} hrs`, hrs: revHrs },
-      { label: "Operational buffer (15%)",           note: `+${Math.round(bufHrs)} hrs`, hrs: bufHrs },
-    ];
-  } else {
-    // Scope / AI mode — updated effort model: 5 hrs primary, 2 hrs secondary
-    const fc     = FLOW_COMPLEXITY.find(f => f.id === s.flowComplexity)?.mult || 1.2;
-    const pl     = PLATFORM_OPTIONS.find(p => p.id === s.platform)?.mult || 1.0;
-    const dsHrs  = DESIGN_SYSTEM.find(d => d.id === s.designSystem)?.hrs || 0;
-    const uxHrs  = s.uxActivities.reduce((sum, id) => sum + (ALL_UX_ITEMS.find(u => u.id === id)?.hrs || 0), 0);
+  // ── PRODUCT DESIGN (UNCHANGED) ─────────────────────────────────────────────
+  if (!s.role || s.role === "product") {
+    if (s.mode === "quick") {
+      const base   = Number(s.hours) || 0;
+      const revHrs = base * (s.revisions * 0.10);
+      const bufHrs = (base + revHrs) * 0.15;
+      designHrs    = base + revHrs + bufHrs;
+      hrsDetail    = { base, revHrs: Math.round(revHrs), bufHrs: Math.round(bufHrs) };
+      scopeRows    = [
+        { label: "Your estimated hours",              note: `${base} hrs`,               hrs: base   },
+        { label: `Revisions (${s.revisions} × 10%)`,  note: `+${Math.round(revHrs)} hrs`, hrs: revHrs },
+        { label: "Operational buffer (15%)",           note: `+${Math.round(bufHrs)} hrs`, hrs: bufHrs },
+      ];
+    } else {
+      const fc     = FLOW_COMPLEXITY.find(f => f.id === s.flowComplexity)?.mult || 1.2;
+      const pl     = PLATFORM_OPTIONS.find(p => p.id === s.platform)?.mult || 1.0;
+      const dsHrs  = DESIGN_SYSTEM.find(d => d.id === s.designSystem)?.hrs || 0;
+      const uxHrs  = s.uxActivities.reduce((sum, id) => sum + (ALL_UX_ITEMS.find(u => u.id === id)?.hrs || 0), 0);
 
-    const primaryHrs   = s.primaryScreens   * 4;   // 4 hrs per primary screen
-    const secondaryHrs = s.secondaryScreens * 1.5; // 1.5 hrs per secondary screen
-    const screenBase   = primaryHrs + secondaryHrs;
-    const afterFC      = screenBase * fc;
-    const afterPL      = afterFC * pl;
-    const scopeBase    = afterPL + dsHrs + uxHrs;
-    const revHrs       = scopeBase * (s.revisions * 0.10);
-    const bufHrs       = (scopeBase + revHrs) * 0.15;
-    designHrs          = scopeBase + revHrs + bufHrs;
+      const primaryHrs   = s.primaryScreens   * 4;
+      const secondaryHrs = s.secondaryScreens * 1.5;
+      const screenBase   = primaryHrs + secondaryHrs;
+      const afterFC      = screenBase * fc;
+      const afterPL      = afterFC * pl;
+      const scopeBase    = afterPL + dsHrs + uxHrs;
+      const revHrs       = scopeBase * (s.revisions * 0.10);
+      const bufHrs       = (scopeBase + revHrs) * 0.15;
+      designHrs          = scopeBase + revHrs + bufHrs;
 
-    const fcAdj = afterFC - screenBase;
-    const plAdj = afterPL - afterFC;
+      const fcAdj = afterFC - screenBase;
+      const plAdj = afterPL - afterFC;
 
-    hrsDetail = {
-      primaryHrs,
-      secondaryHrs: Math.round(secondaryHrs),
-      uxHrs,
-      dsHrs,
-      revHrs: Math.round(revHrs),
-      bufHrs: Math.round(bufHrs),
-    };
+      hrsDetail = {
+        primaryHrs,
+        secondaryHrs: Math.round(secondaryHrs),
+        uxHrs,
+        dsHrs,
+        revHrs: Math.round(revHrs),
+        bufHrs: Math.round(bufHrs),
+      };
 
-    scopeRows = [
-      { label: `Primary screens (${s.primaryScreens} × 4 hrs)`,     note: `${primaryHrs} hrs`,                 hrs: primaryHrs   },
-      { label: `Secondary screens (${s.secondaryScreens} × 1.5 hrs)`,  note: `${Math.round(secondaryHrs)} hrs`,   hrs: secondaryHrs },
-    ];
-    if (fc > 1)    scopeRows.push({ label: `Flow complexity (×${fc})`,      note: `+${Math.round(fcAdj)} hrs`, hrs: fcAdj  });
-    if (pl > 1)    scopeRows.push({ label: "Multi-platform (×1.3)",         note: `+${Math.round(plAdj)} hrs`, hrs: plAdj  });
-    if (dsHrs > 0) scopeRows.push({ label: `Design system (+${dsHrs} hrs)`, note: `+${dsHrs} hrs`,             hrs: dsHrs  });
-    if (uxHrs > 0) scopeRows.push({ label: `UX research (+${uxHrs} hrs)`,   note: `+${uxHrs} hrs`,             hrs: uxHrs  });
-    scopeRows.push({ label: `Revisions (${s.revisions} × 10%)`,  note: `+${Math.round(revHrs)} hrs`, hrs: revHrs });
-    scopeRows.push({ label: "Operational buffer (15%)",           note: `+${Math.round(bufHrs)} hrs`, hrs: bufHrs });
+      scopeRows = [
+        { label: `Primary screens (${s.primaryScreens} × 4 hrs)`,     note: `${primaryHrs} hrs`,                 hrs: primaryHrs   },
+        { label: `Secondary screens (${s.secondaryScreens} × 1.5 hrs)`,  note: `${Math.round(secondaryHrs)} hrs`,   hrs: secondaryHrs },
+      ];
+      if (fc > 1)    scopeRows.push({ label: `Flow complexity (×${fc})`,      note: `+${Math.round(fcAdj)} hrs`, hrs: fcAdj  });
+      if (pl > 1)    scopeRows.push({ label: "Multi-platform (×1.3)",         note: `+${Math.round(plAdj)} hrs`, hrs: plAdj  });
+      if (dsHrs > 0) scopeRows.push({ label: `Design system (+${dsHrs} hrs)`, note: `+${dsHrs} hrs`,             hrs: dsHrs  });
+      if (uxHrs > 0) scopeRows.push({ label: `UX research (+${uxHrs} hrs)`,   note: `+${uxHrs} hrs`,             hrs: uxHrs  });
+      scopeRows.push({ label: `Revisions (${s.revisions} × 10%)`,  note: `+${Math.round(revHrs)} hrs`, hrs: revHrs });
+      scopeRows.push({ label: "Operational buffer (15%)",           note: `+${Math.round(bufHrs)} hrs`, hrs: bufHrs });
+    }
+  }
+  // ── GRAPHIC DESIGN ─────────────────────────────────────────────────────────
+  else if (s.role === "graphic") {
+    if (s.mode === "quick") {
+      const base   = Number(s.hours) || 0;
+      const revHrs = base * (s.revisions * 0.10);
+      const bufHrs = (base + revHrs) * 0.15;
+      designHrs    = base + revHrs + bufHrs;
+      hrsDetail    = { base, revHrs: Math.round(revHrs), bufHrs: Math.round(bufHrs) };
+      scopeRows    = [
+        { label: "Your estimated hours",              note: `${base} hrs`,               hrs: base   },
+        { label: `Revisions (${s.revisions} × 10%)`,  note: `+${Math.round(revHrs)} hrs`, hrs: revHrs },
+        { label: "Operational buffer (15%)",           note: `+${Math.round(bufHrs)} hrs`, hrs: bufHrs },
+      ];
+    } else {
+      const result  = calcHoursGraphic(s);
+      designHrs     = result.designHrs;
+      scopeRows     = result.scopeRows;
+      hrsDetail     = result.hrsDetail;
+    }
+  }
+  // ── BRANDING DESIGN ────────────────────────────────────────────────────────
+  else if (s.role === "branding") {
+    if (s.mode === "quick") {
+      const base   = Number(s.hours) || 0;
+      const revHrs = base * (s.revisions * 0.10);
+      const bufHrs = (base + revHrs) * 0.15;
+      designHrs    = base + revHrs + bufHrs;
+      hrsDetail    = { base, revHrs: Math.round(revHrs), bufHrs: Math.round(bufHrs) };
+      scopeRows    = [
+        { label: "Your estimated hours",              note: `${base} hrs`,               hrs: base   },
+        { label: `Revisions (${s.revisions} × 10%)`,  note: `+${Math.round(revHrs)} hrs`, hrs: revHrs },
+        { label: "Operational buffer (15%)",           note: `+${Math.round(bufHrs)} hrs`, hrs: bufHrs },
+      ];
+    } else {
+      const result  = calcHoursBranding(s);
+      designHrs     = result.designHrs;
+      scopeRows     = result.scopeRows;
+      hrsDetail     = result.hrsDetail;
+    }
+  }
+  // ── VIDEO EDITING ──────────────────────────────────────────────────────────
+  else if (s.role === "video") {
+    if (s.mode === "quick") {
+      const base   = Number(s.hours) || 0;
+      const revHrs = base * (s.revisions * 0.10);
+      const bufHrs = (base + revHrs) * 0.15;
+      designHrs    = base + revHrs + bufHrs;
+      hrsDetail    = { base, revHrs: Math.round(revHrs), bufHrs: Math.round(bufHrs) };
+      scopeRows    = [
+        { label: "Your estimated hours",              note: `${base} hrs`,               hrs: base   },
+        { label: `Revisions (${s.revisions} × 10%)`,  note: `+${Math.round(revHrs)} hrs`, hrs: revHrs },
+        { label: "Operational buffer (15%)",           note: `+${Math.round(bufHrs)} hrs`, hrs: bufHrs },
+      ];
+    } else {
+      const result  = calcHoursVideo(s);
+      designHrs     = result.designHrs;
+      scopeRows     = result.scopeRows;
+      hrsDetail     = result.hrsDetail;
+    }
   }
 
-  // ── COST LAYERS ──────────────────────────────────────────────────────────
-  // 1. Base design cost (hours × effective rate)
+  // ── SHARED COST LAYERS (identical for all roles) ──────────────────────────
   const designCostMid = designHrs * effRateMid;
   const designCostMax = designHrs * effRateMax;
-
-  // 2. Project management overhead (% of design cost)
-  const pmCostMid = designCostMid * pmPct;
-  const pmCostMax = designCostMax * pmPct;
-
-  // 3. Freelance sustainability multiplier
+  const pmCostMid     = designCostMid * pmPct;
+  const pmCostMax     = designCostMax * pmPct;
   const projectCostMid = (designCostMid + pmCostMid) * freeMult;
   const projectCostMax = (designCostMax + pmCostMax) * freeMult;
-
-  // 4. GST (optional)
-  const gstMid   = s.includeGST ? projectCostMid * GST_RATE : 0;
-  const gstMax   = s.includeGST ? projectCostMax * GST_RATE : 0;
-  const totalMid = projectCostMid + gstMid;
-  const totalMax = projectCostMax + gstMax;
-
-  // Breakdown rows (cost at midpoint rate for display)
+  const gstMid    = s.includeGST ? projectCostMid * GST_RATE : 0;
+  const gstMax    = s.includeGST ? projectCostMax * GST_RATE : 0;
+  const totalMid  = projectCostMid + gstMid;
+  const totalMax  = projectCostMax + gstMax;
   const breakdown = scopeRows.map(r => ({ ...r, amount: r.hrs * effRateMid }));
 
   return {
@@ -210,187 +753,183 @@ function calcEstimate(s) {
   };
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// JUSTIFICATION — role-aware but same structure
+// ─────────────────────────────────────────────────────────────────────────────
+
 function buildJustification(s, est) {
-  const pt       = PROJECT_TYPES.find(p => p.id === s.projectType)?.label || "design project";
+  const role     = s.role || "product";
   const expLevel = est.expLevel || EXPERIENCE_LEVELS.find(e => e.id === s.experience);
   const expLbl   = expLevel?.label || "professional";
-  const uxNames  = s.uxActivities.map(id => ALL_UX_ITEMS.find(u => u.id === id)?.label).filter(Boolean);
   const pmLabel  = PM_OVERHEAD.find(p => p.id === (s.pmOverhead || "standard"))?.label?.toLowerCase() || "standard";
 
-  const uxLine   = uxNames.length
-    ? `\n\nThe engagement includes structured UX research — ${uxNames.slice(0, 4).join(", ")}${uxNames.length > 4 ? ", and more" : ""}.`
-    : "";
-  const aiLine   = "";
-  const gstLine  = s.includeGST ? ` GST (18%) of ${inr(est.gstMid)} is included.` : "";
+  let projectDesc = "";
+  let addonLine   = "";
 
-  return `This is a ${pt.toLowerCase()} project requiring approximately ${est.totalHrs} design hours.${uxLine}${aiLine}
+  if (role === "product") {
+    const pt = PROJECT_TYPES.find(p => p.id === s.projectType)?.label || "design project";
+    const uxNames = s.uxActivities.map(id => ALL_UX_ITEMS.find(u => u.id === id)?.label).filter(Boolean);
+    projectDesc = `${pt.toLowerCase()} product design project`;
+    addonLine   = uxNames.length ? `\n\nThe engagement includes structured UX research — ${uxNames.slice(0, 4).join(", ")}${uxNames.length > 4 ? ", and more" : ""}.` : "";
+  } else if (role === "graphic") {
+    const totalDel = (s.primaryScreens || 0) + (s.secondaryScreens || 0);
+    const addonNames = s.uxActivities.map(id => ALL_GRAPHIC_ADDONS.find(u => u.id === id)?.label).filter(Boolean);
+    projectDesc = `graphic design project covering ${totalDel} deliverable${totalDel !== 1 ? "s" : ""}`;
+    addonLine   = addonNames.length ? `\n\nAdditional services included: ${addonNames.join(", ")}.` : "";
+  } else if (role === "branding") {
+    const coreCount = s.primaryScreens || 0;
+    const extCount  = s.secondaryScreens || 0;
+    const addonNames = s.uxActivities.map(id => ALL_BRANDING_ADDONS.find(u => u.id === id)?.label).filter(Boolean);
+    projectDesc = `branding project with ${coreCount} core deliverable${coreCount !== 1 ? "s" : ""}${extCount > 0 ? ` + ${extCount} extended asset${extCount !== 1 ? "s" : ""}` : ""}`;
+    addonLine   = addonNames.length ? `\n\nScope also includes: ${addonNames.join(", ")}.` : "";
+  } else if (role === "video") {
+    const mins    = s.primaryScreens || 0;
+    const rawHrs  = s.secondaryScreens || 0;
+    const addonNames = s.uxActivities.map(id => ALL_VIDEO_ADDONS.find(u => u.id === id)?.label).filter(Boolean);
+    projectDesc = `video editing project with ${mins} minute${mins !== 1 ? "s" : ""} of output${rawHrs > 0 ? ` and ${rawHrs} hours of raw footage` : ""}`;
+    addonLine   = addonNames.length ? `\n\nPost-production services included: ${addonNames.join(", ")}.` : "";
+  }
+
+  const gstLine = s.includeGST ? ` GST (18%) of ${inr(est.gstMid)} is included.` : "";
+
+  return `This is a ${projectDesc} requiring approximately ${est.totalHrs} hours.${addonLine}
 
 Pricing reflects ${expLbl.toLowerCase()} market rates (${expLevel?.rangeLabel || ""}). A utilization adjustment accounts for ${Math.round((1 - est.utilization) * 100)}% non-billable time — admin, client communication, and business development — raising the effective rate to ${inr(est.effRateMid)}/hr.
 
-A ${est.freeMult}× freelance sustainability premium is applied to cover costs salaried designers do not carry: software subscriptions, hardware, health insurance, and business risk. ${pmLabel !== "none" ? `${pmLabel.charAt(0).toUpperCase() + pmLabel.slice(1)} project management overhead (${Math.round(est.pmPct * 100)}%) is included for coordination and reviews.` : ""}${gstLine}
+A ${est.freeMult}× freelance sustainability premium is applied to cover costs salaried professionals do not carry: software subscriptions, hardware, health insurance, and business risk. ${pmLabel !== "none" ? `${pmLabel.charAt(0).toUpperCase() + pmLabel.slice(1)} project management overhead (${Math.round(est.pmPct * 100)}%) is included for coordination and reviews.` : ""}${gstLine}
 
 The suggested professional range is ${inr(est.low)} – ${inr(est.high)}.`;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// CSS
+// ROLE-AWARE UI LABEL HELPERS
+// ─────────────────────────────────────────────────────────────────────────────
+
+function getPrimaryLabel(role) {
+  if (role === "graphic")  return { label: "Complex Deliverables", unit: "items", hint: "Posters, brochures, banner sets (3 hrs each)", ph: "4" };
+  if (role === "branding") return { label: "Core Brand Deliverables", unit: "items", hint: "Logo suite, brand identity, guidelines (12 hrs each)", ph: "2" };
+  if (role === "video")    return { label: "Output Duration", unit: "minutes", hint: "Final video length in minutes (1.5 hrs per minute)", ph: "5" };
+  return { label: "Primary screens", unit: "screens", hint: "Distinct full-page views (4 hrs each)", ph: "8" };
+}
+
+function getSecondaryLabel(role) {
+  if (role === "graphic")  return { label: "Simple Deliverables", unit: "items", hint: "Social cards, icons, resizes (1 hr each)", ph: "6" };
+  if (role === "branding") return { label: "Extended Brand Assets", unit: "items", hint: "Social templates, stationery, signage (4 hrs each)", ph: "3" };
+  if (role === "video")    return { label: "Raw Footage", unit: "hours", hint: "Total hours of footage to review (optional)", ph: "0" };
+  return { label: "Secondary screens", unit: "screens", hint: "Modals, overlays, empty states (1.5 hrs each)", ph: "0" };
+}
+
+function getComplexityOptions(role) {
+  if (role === "graphic")  return GRAPHIC_COMPLEXITY;
+  if (role === "branding") return BRANDING_STRATEGY;
+  if (role === "video")    return VIDEO_COMPLEXITY;
+  return FLOW_COMPLEXITY;
+}
+
+function getPlatformOptions(role) {
+  if (role === "graphic")  return GRAPHIC_BRAND_ALIGNMENT;
+  if (role === "branding") return BRANDING_SCOPE;
+  if (role === "video")    return VIDEO_FOOTAGE_RATIO;
+  return PLATFORM_OPTIONS;
+}
+
+function getAddonGroups(role) {
+  if (role === "graphic")  return GRAPHIC_ADDON_GROUPS;
+  if (role === "branding") return BRANDING_ADDON_GROUPS;
+  if (role === "video")    return VIDEO_ADDON_GROUPS;
+  return UX_GROUPS;
+}
+
+function getAllAddons(role) {
+  if (role === "graphic")  return ALL_GRAPHIC_ADDONS;
+  if (role === "branding") return ALL_BRANDING_ADDONS;
+  if (role === "video")    return ALL_VIDEO_ADDONS;
+  return ALL_UX_ITEMS;
+}
+
+function getAddonStepTitle(role) {
+  if (role === "graphic")  return { titleEl: <>Which graphic <em>add-ons</em> are included?</>,  title: "Which graphic add-ons are included?",  sub: "Select additional production or strategy services." };
+  if (role === "branding") return { titleEl: <>Which brand <em>add-ons</em> are included?</>,    title: "Which brand add-ons are included?",    sub: "Select additional brand strategy or asset deliverables." };
+  if (role === "video")    return { titleEl: <>Which <em>post-production</em> add-ons are included?</>, title: "Which post-production add-ons are included?", sub: "Select additional video services in scope." };
+  return { titleEl: <>Which <em>UX activities</em> are included?</>, title: "Which UX activities are included?", sub: "Select all activities in scope." };
+}
+
+function getComplexityStepTitle(role) {
+  if (role === "graphic")  return { titleEl: <>What's the <em>visual complexity?</em></>,          title: "Visual complexity?",                    sub: "Affects effort per deliverable." };
+  if (role === "branding") return { titleEl: <>How deep is the <em>brand strategy?</em></>,        title: "How deep is the brand strategy?",        sub: "Strategy depth multiplies overall engagement effort." };
+  if (role === "video")    return { titleEl: <>What's the <em>editing complexity?</em></>,          title: "What's the editing complexity?",         sub: "More complex edits multiply hours per output minute." };
+  return { titleEl: <>How complex are the <em>user flows?</em></>, title: "How complex are the user flows?", sub: "Flow complexity multiplies screen effort to account for design decisions at each branch point." };
+}
+
+function getPlatformStepTitle(role) {
+  if (role === "graphic")  return { titleEl: <>Are <em>brand guidelines</em> provided?</>,          title: "Are brand guidelines provided?",          sub: "Developing new brand styles adds ~30% effort." };
+  if (role === "branding") return { titleEl: <>What is the <em>brand scope?</em></>,                title: "What is the brand scope?",                sub: "Adding print to digital scope increases total effort by 30%." };
+  if (role === "video")    return { titleEl: <>What is the <em>footage-to-output ratio?</em></>,    title: "What is the footage-to-output ratio?",    sub: "Heavy raw footage means more review and culling time." };
+  return { titleEl: <>Which <em>platforms</em> are in scope?</>, title: "Which platforms are in scope?", sub: "Designing for multiple platforms multiplies screen effort by 1.3×." };
+}
+
+function getScopeStepTitle(role) {
+  if (role === "graphic")  return { titleEl: <>How many <em>deliverables</em> does this project have?</>, title: "How many deliverables does this project have?", sub: "Complex = posters, brochures, full layouts (3 hrs each). Simple = social cards, resizes, icons (1 hr each)." };
+  if (role === "branding") return { titleEl: <>What does this <em>branding project</em> cover?</>,        title: "What does this branding project cover?",        sub: "Core = logo, identity, guidelines (12 hrs each). Extended = templates, stationery, signage (4 hrs each)." };
+  if (role === "video")    return { titleEl: <>What are the <em>video specs?</em></>,                     title: "What are the video specs?",                     sub: "Output duration drives base hours. Raw footage adds review time." };
+  return { titleEl: <>How many <em>screens</em> does this project have?</>, title: "How many screens does this project have?", sub: "Primary screens = distinct full-page views (4 hrs each).\nSecondary = modals, overlays, empty states (1.5 hrs each)." };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CSS — unchanged from original + role selector additions
 // ─────────────────────────────────────────────────────────────────────────────
 
 const CSS = `
-@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500&family=Instrument+Sans:wght@300;400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500&family=Instrument+Sans:wght@300;400;500&family=DM+Mono:wght@300;400;500&display=swap');
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
-  /* ── Page layers — 3-level hierarchy ── */
-  --bg:           #F7F3EE;   /* page canvas          */
-  --surface:      #FFFEFB;   /* cards / inputs        */
-  --panel:        #F0EBE3;   /* sidebar / bottom sheet */
-
-  /* ── Text ── */
-  --ink:          #111010;   /* primary               */
-  --ink2:         #3D3A35;   /* secondary             */
-  --ink3:         #7A7670;   /* muted / labels        */
-
-  /* ── Gold accent ── */
-  --gold:         #D4890A;
-  --gold-l:       #F5E6C4;   /* selected card bg      */
-  --gold-d:       #9B6207;   /* display labels        */
-  --gold-bd:      #E8D0A0;   /* gold borders          */
-
-  /* ── Borders ── */
-  --border:       #E2DDD6;   /* default dividers      */
-  --border2:      #C8C3BB;   /* inputs / strong edges */
-
-  /* ── Primary button (inverts in dark) ── */
-  --btn-bg:       #111010;
-  --btn-text:     #FFFFFF;
-  --btn-hover:    #2A2522;
-
-  /* ── Semantic ── */
-  --success:      #1A5C30;
-  --sbg:          #EAF4ED;
-  --success-bd:   #B8D9C0;
-  --warn-bg:      #FBF5EA;
-  --warn-bd:      #E6D09A;
-  --warn-tx:      #7A5C1E;
+  --bg:           #FAF8F5;
+  --surface:      #FFFFFF;
+  --panel:        #F4F0EB;
+  --ink:          #2C2820;
+  --ink2:         #5C5650;
+  --ink3:         #9A948E;
+  --gold:         #C97D0A;
+  --gold-l:       #FDF3E0;
+  --gold-d:       #8B5A07;
+  --gold-bd:      #EDD49A;
+  --border:       #EAE5DE;
+  --border2:      #D4CDC5;
+  --btn-bg:       #5C4A2E;
+  --btn-text:     #FFFDF9;
+  --btn-hover:    #4A3A22;
+  --success:      #2A6B40;
+  --sbg:          #EEF6F2;
+  --success-bd:   #C0DDC8;
+  --warn-bg:      #FDFAF0;
+  --warn-bd:      #EAD9A0;
+  --warn-tx:      #7A6020;
   --danger:       #C0392B;
   --danger-l:     #FDF0EE;
   --danger-bd:    #F0C0B8;
-
-  /* ── Interaction ── */
-  --hover-surface: #FDFAF4;
-
-  /* ── Mobile bar ── */
-  --mob-bg:       #111010;
-  --mob-text:     #FFFFFF;
-  --mob-muted:    rgba(255,255,255,0.50);
-  --mob-hint:     rgba(255,255,255,0.38);
-
-  /* ── Purple badge (AI secondary) ── */
-  --purple-bg:    #EEE8F8;
+  --hover-surface: #FEFCF8;
+  --mob-bg:       #4A3A22;
+  --mob-text:     #FDF8F0;
+  --mob-muted:    rgba(253,248,240,0.60);
+  --mob-hint:     rgba(253,248,240,0.40);
+  --purple-bg:    #F2EEF9;
   --purple-text:  #5B3FA6;
   --purple-bd:    #D5CAF0;
-
-  /* ── Blue badge (share) ── */
-  --blue-bg:      #EEF3FF;
+  --blue-bg:      #EEF4FF;
   --blue-text:    #3B57C4;
   --blue-bd:      #C8D5F5;
-  --blue-hover:   #DDE6FF;
-
-  /* ── Featured card border ── */
+  --blue-hover:   #E0EAFF;
   --featured-bd:  #E0C87E;
-
-  /* ── Save button hover ── */
-  --save-hover:   #EDD89A;
-
-  /* ── Sticky header ── */
-  --header-bg:    rgba(247, 243, 238, 0.92);
-
-  /* ── Type ── */
+  --save-hover:   #F0DFA0;
+  --header-bg:    rgba(250, 248, 245, 0.94);
   --serif:   'Cormorant Garamond', Georgia, serif;
   --sans:    'Instrument Sans', system-ui, sans-serif;
+  --mono:    'DM Mono', 'Fira Mono', monospace;
   --r:       11px;
   --r2:      15px;
   --t:       0.2s cubic-bezier(.4,0,.2,1);
-}
-
-/* ─────────────────────────────────────────────────────────────────────────────
-   DARK MODE
-   Hierarchy:  --bg #1A1814  <  --surface #242018  <  --panel #2D2921
-   Target contrast ratios:
-     --ink   on --surface  ≈ 11:1   (primary text, always clear)
-     --ink2  on --surface  ≈  6:1   (secondary text, readable)
-     --ink3  on --surface  ≈  3.5:1 (muted labels, intentionally quiet)
-     --gold  on --surface  ≈  4.5:1 (accent, AA large text)
-───────────────────────────────────────────────────────────────────────────── */
-@media (prefers-color-scheme: dark) {
-  :root {
-    /* ── Page layers ── */
-    --bg:           #1A1814;   /* warm near-black canvas  */
-    --surface:      #242018;   /* cards — clearly above bg */
-    --panel:        #2D2921;   /* sidebar / sheet — above surface */
-
-    /* ── Text ── */
-    --ink:          #E8E2D8;   /* soft warm white — not pure #fff  */
-    --ink2:         #A89F94;   /* secondary — readable, not harsh  */
-    --ink3:         #6A6258;   /* muted labels                     */
-
-    /* ── Gold — desaturated, comfortable ── */
-    --gold:         #C8800C;   /* accent — reduced saturation      */
-    --gold-l:       #2C2110;   /* selected bg — dark warm tint     */
-    --gold-d:       #D9962A;   /* display labels — warm amber      */
-    --gold-bd:      #463418;   /* gold borders                     */
-
-    /* ── Borders ── */
-    --border:       #332E28;   /* default — subtle separation      */
-    --border2:      #463F37;   /* inputs / strong — still quiet    */
-
-    /* ── Primary button — dark surface, warm text ── */
-    --btn-bg:       #383128;   /* warm dark surface — above --panel  */
-    --btn-text:     #E8E2D8;   /* soft warm white text               */
-    --btn-hover:    #443C30;   /* slightly lighter on hover          */
-
-    /* ── Semantic ── */
-    --success:      #52B876;   /* lighter green — visible on dark  */
-    --sbg:          #0D2016;   /* success panel bg                 */
-    --success-bd:   #1A3D26;   /* success border                   */
-    --warn-bg:      #221908;   /* warn panel                       */
-    --warn-bd:      #453510;   /* warn border                      */
-    --warn-tx:      #C09A50;   /* warn text — warm amber           */
-    --danger:       #D85A4A;   /* danger — slightly muted red      */
-    --danger-l:     #261210;   /* danger panel bg                  */
-    --danger-bd:    #4D2420;   /* danger border                    */
-
-    /* ── Interaction ── */
-    --hover-surface: #2E2820;  /* card hover — warmer than surface */
-
-    /* ── Mobile bar — distinct from bg ── */
-    --mob-bg:       #2D2921;   /* panel colour — clearly above bg  */
-    --mob-text:     #E8E2D8;   /* primary text                     */
-    --mob-muted:    rgba(232,226,216,0.55);
-    --mob-hint:     rgba(232,226,216,0.38);
-
-    /* ── Purple badge ── */
-    --purple-bg:    #1C1730;
-    --purple-text:  #B09AE8;
-    --purple-bd:    #362960;
-
-    /* ── Blue badge ── */
-    --blue-bg:      #141828;
-    --blue-text:    #7898E0;
-    --blue-bd:      #243060;
-    --blue-hover:   #1C2440;
-
-    /* ── Featured card ── */
-    --featured-bd:  #463418;
-
-    /* ── Save button hover ── */
-    --save-hover:   #38280C;
-
-    /* ── Sticky header ── */
-    --header-bg:    rgba(26, 24, 20, 0.92);
-  }
 }
 
 html, body {
@@ -398,10 +937,10 @@ html, body {
   background: var(--bg);
   color: var(--ink);
   font-family: var(--sans);
+  font-size: 15px;
   -webkit-font-smoothing: antialiased;
 }
 
-/* ── LAYOUT ── */
 .layout {
   display: flex;
   min-height: 100vh;
@@ -444,7 +983,6 @@ html, body {
   .sidebar { display: none; }
 }
 
-/* ── HEADER STICKY WRAPPER ── */
 .header-sticky {
   position: sticky;
   top: 0;
@@ -460,952 +998,406 @@ html, body {
   transition: background var(--t), border-color var(--t);
 }
 
-/* ── HEADER ── */
 .app-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16px 40px;
+  padding: 14px 40px;
   max-width: 760px;
   width: 100%;
+  gap: 8px;
+  min-width: 0;
 }
 
 @media (max-width: 900px) {
-  .app-header { padding: 14px 24px; }
+  .app-header { padding: 12px 24px; }
 }
 
-.logo {
-  font-family: var(--serif);
-  font-size: 15px;
-  font-weight: 500;
-  letter-spacing: 0.06em;
-  color: var(--ink);
+/* Shared inner-width constraint — all header children use this */
+.header-row {
+  max-width: 760px;
+  width: 100%;
+  padding-left: 40px;
+  padding-right: 40px;
+}
+@media (max-width: 900px) {
+  .header-row { padding-left: 24px; padding-right: 24px; }
 }
 
+.logo { font-family: var(--serif); font-size: 15px; font-weight: 500; letter-spacing: 0.06em; color: var(--ink); flex-shrink: 0; }
 .logo span { color: var(--gold); }
 
-.step-counter {
-  font-size: 11px;
-  font-weight: 300;
-  color: var(--ink3);
-  letter-spacing: 0.08em;
-}
-
-/* ── PROGRESS ── */
-.progress-wrap {
-  padding: 0 40px 12px;
-  max-width: 760px;
-  width: 100%;
-}
-
-@media (max-width: 900px) {
-  .progress-wrap { padding: 0 24px 10px; }
-}
-
-.progress-track {
-  height: 1.5px;
-  background: var(--border);
-  border-radius: 2px;
-  overflow: hidden;
-}
-
-.progress-fill {
-  height: 100%;
-  background: var(--gold);
-  border-radius: 2px;
-  transition: width 0.5s cubic-bezier(.4,0,.2,1);
-}
-
-/* ── FLOW STEPPER ── */
-.stepper-wrap {
-  width: 100%;
-  max-width: 760px;
-  padding: 0 40px 12px;
-  overflow-x: auto;
-  scrollbar-width: none;
-  -webkit-overflow-scrolling: touch;
-}
-.stepper-wrap::-webkit-scrollbar { display: none; }
-
-@media (max-width: 900px) {
-  .stepper-wrap { padding: 0 20px 10px; }
-}
-
-.stepper {
+/* Header right cluster — never overflows its side */
+.header-right {
   display: flex;
   align-items: center;
-  gap: 0;
-  white-space: nowrap;
-  min-width: max-content;
-}
-
-/* Connecting line between pills */
-.stepper-line {
-  flex: 0 0 10px;
-  height: 1.5px;
-  background: var(--border2);
-  flex-shrink: 0;
-}
-.stepper-line.done-line {
-  background: var(--gold-d);
-}
-
-/* Individual pill */
-.stepper-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 4px 10px;
-  border-radius: 20px;
-  border: 1.5px solid transparent;
-  font-family: var(--sans);
-  font-size: 11.5px;
-  font-weight: 400;
-  white-space: nowrap;
-  flex-shrink: 0;
-  transition: background var(--t), border-color var(--t), color var(--t);
-  cursor: default;
-  user-select: none;
-}
-
-/* Done pill */
-.stepper-pill.done {
-  background: var(--stepper-done-bg);
-  border-color: var(--stepper-done-bd);
-  color: var(--stepper-done-text);
-  font-weight: 400;
-}
-
-/* Current pill — gold filled */
-.stepper-pill.current {
-  background: var(--gold);
-  border-color: var(--gold);
-  color: #fff;
-  font-weight: 600;
-  font-size: 12px;
-  box-shadow: 0 1px 6px rgba(212, 137, 10, 0.35);
-}
-
-/* Upcoming pill — ghost */
-.stepper-pill.upcoming {
-  background: transparent;
-  border-color: var(--border);
-  color: var(--ink3);
-  font-weight: 300;
-}
-
-/* Check icon inside done pill */
-.stepper-icon {
-  font-size: 9px;
-  font-weight: 700;
-  line-height: 1;
+  gap: 8px;
+  min-width: 0;
   flex-shrink: 0;
 }
 
-/* Step number badge on upcoming */
-.stepper-num {
-  font-size: 9px;
-  font-weight: 500;
-  opacity: 0.6;
-  flex-shrink: 0;
+/* Persistent "New estimate" button in header */
+.header-new-btn {
+  font-size: 11.5px; font-weight: 400; font-family: var(--sans);
+  color: var(--ink3); background: none;
+  border: 1px solid var(--border2); border-radius: 20px;
+  padding: 4px 11px; cursor: pointer;
+  transition: color var(--t), border-color var(--t);
+  white-space: nowrap; flex-shrink: 0;
+}
+.header-new-btn:hover { color: var(--ink); border-color: var(--ink3); }
+
+/* Role badge — hidden on small mobile, shown on tablet+ */
+.role-badge {
+  font-size: 10.5px; font-weight: 500; letter-spacing: 0.1em;
+  text-transform: uppercase; color: var(--gold-d);
+  background: var(--gold-l); border: 1px solid var(--gold-bd);
+  border-radius: 20px; padding: 3px 10px;
+  white-space: nowrap; flex-shrink: 0;
+}
+@media (max-width: 560px) {
+  /* Hide role badge on small screens — stepper already shows this context */
+  .role-badge { display: none; }
+  /* Shrink +New label */
+  .header-new-btn { padding: 4px 9px; font-size: 11px; }
 }
 
-/* Stepper-specific tokens */
-:root {
-  --stepper-done-bg:   rgba(212, 137, 10, 0.12);
-  --stepper-done-bd:   rgba(212, 137, 10, 0.30);
-  --stepper-done-text: var(--gold-d);
+/* Desktop: verbose "Step 3 of 9" */
+.step-counter {
+  font-size: 11px; font-weight: 300; color: var(--ink3); letter-spacing: 0.08em;
+  white-space: nowrap; flex-shrink: 0;
 }
-@media (prefers-color-scheme: dark) {
-  :root {
-    --stepper-done-bg:   rgba(200, 128, 12, 0.18);
-    --stepper-done-bd:   rgba(200, 128, 12, 0.35);
-    --stepper-done-text: var(--gold-d);
+
+/* Mobile: compact "3 / 9" badge — visually distinct from the named stepper pills */
+@media (max-width: 768px) {
+  .step-counter {
+    font-size: 11px; font-weight: 500; letter-spacing: 0.04em;
+    color: var(--ink3); background: var(--surface);
+    border: 1px solid var(--border2); border-radius: 20px;
+    padding: 2px 9px; font-family: var(--sans);
   }
+  .step-counter::before { content: attr(data-short); }
+  .step-counter-full { display: none; }
 }
 
-/* ── SCREEN TRANSITIONS ── */
-.screen {
-  animation: screenIn 0.3s cubic-bezier(.4,0,.2,1) both;
-}
+.progress-wrap { padding-bottom: 12px; }
+.progress-track { height: 1.5px; background: var(--border); border-radius: 2px; overflow: hidden; }
+.progress-fill { height: 100%; background: var(--gold); border-radius: 2px; transition: width 0.5s cubic-bezier(.4,0,.2,1); }
 
-@keyframes screenIn {
-  from { opacity: 0; transform: translateX(16px); }
-  to   { opacity: 1; transform: translateX(0); }
-}
+.stepper-wrap { overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; padding-bottom: 12px; }
+.stepper-wrap::-webkit-scrollbar { display: none; }
+.stepper { display: flex; align-items: center; gap: 0; white-space: nowrap; min-width: max-content; }
+.stepper-line { flex: 0 0 10px; height: 1.5px; background: var(--border2); flex-shrink: 0; }
+.stepper-line.done-line { background: var(--gold-d); }
+.stepper-pill { display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px; border-radius: 20px; border: 1.5px solid transparent; font-family: var(--sans); font-size: 11.5px; font-weight: 400; white-space: nowrap; flex-shrink: 0; transition: background var(--t), border-color var(--t), color var(--t); cursor: default; user-select: none; }
+.stepper-pill.done { background: rgba(212,137,10,0.12); border-color: rgba(212,137,10,0.30); color: var(--gold-d); }
+.stepper-pill.current { background: var(--gold); border-color: var(--gold); color: #fff; font-weight: 600; font-size: 12px; box-shadow: 0 1px 6px rgba(212,137,10,0.35); }
+.stepper-pill.upcoming { background: transparent; border-color: var(--border); color: var(--ink3); font-weight: 300; }
+.stepper-icon { font-size: 9px; font-weight: 700; line-height: 1; flex-shrink: 0; }
+.stepper-num { font-size: 9px; font-weight: 500; opacity: 0.6; flex-shrink: 0; }
 
-/* ── TYPOGRAPHY ── */
-.eyebrow {
-  font-size: 10.5px;
-  font-weight: 500;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: var(--ink3);
-  margin-bottom: 10px;
-}
+.screen { animation: screenIn 0.3s cubic-bezier(.4,0,.2,1) both; }
+@keyframes screenIn { from { opacity: 0; transform: translateX(16px); } to { opacity: 1; transform: translateX(0); } }
 
-.screen-title {
-  font-family: var(--serif);
-  font-size: clamp(26px, 4.5vw, 40px);
-  font-weight: 500;
-  line-height: 1.12;
-  color: var(--ink);
-  margin-bottom: 8px;
-}
+.eyebrow { font-size: 11.5px; font-weight: 500; letter-spacing: 0.16em; text-transform: uppercase; color: var(--ink3); margin-bottom: 10px; }
+.screen-title { font-family: var(--serif); font-size: clamp(28px, 5vw, 44px); font-weight: 500; line-height: 1.12; color: var(--ink); margin-bottom: 10px; }
+.screen-title em { font-style: italic; color: var(--gold); }
+.screen-sub { font-size: 14.5px; font-weight: 300; color: var(--ink2); line-height: 1.7; margin-bottom: 32px; }
 
-.screen-title em {
-  font-style: italic;
-  color: var(--gold);
-}
-
-.screen-sub {
-  font-size: 13.5px;
-  font-weight: 300;
-  color: var(--ink2);
-  line-height: 1.65;
-  margin-bottom: 30px;
-}
-
-/* ── OPTION CARDS ── */
 .opt-grid { display: flex; flex-direction: column; gap: 9px; margin-bottom: 24px; }
 .opt-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; margin-bottom: 24px; }
 .opt-grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 9px; margin-bottom: 24px; }
+@media (max-width: 480px) { .opt-grid-2, .opt-grid-3 { grid-template-columns: 1fr; } }
 
-@media (max-width: 480px) {
-  .opt-grid-2, .opt-grid-3 { grid-template-columns: 1fr; }
-}
-
-.opt-card {
-  background: var(--surface);
-  border: 1.5px solid var(--border);
-  border-radius: var(--r2);
-  padding: 15px 18px;
-  cursor: pointer;
-  transition: border-color var(--t), background var(--t), transform 0.1s;
-  text-align: left;
-  width: 100%;
-  font-family: var(--sans);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
+.opt-card { background: var(--surface); border: 1.5px solid var(--border); border-radius: var(--r2); padding: 15px 18px; cursor: pointer; transition: border-color var(--t), background var(--t), transform 0.1s; text-align: left; width: 100%; font-family: var(--sans); display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .opt-card:hover { border-color: var(--gold-d); background: var(--hover-surface); }
 .opt-card:active { transform: scale(0.995); }
 .opt-card.selected { border-color: var(--gold); background: var(--gold-l); }
-
 .opt-card-content { flex: 1; }
-.opt-card-label { font-size: 14px; font-weight: 500; color: var(--ink); display: block; margin-bottom: 2px; }
-.opt-card-sub   { font-size: 12px; font-weight: 300; color: var(--ink3); }
+.opt-card-label { font-size: 15px; font-weight: 500; color: var(--ink); display: block; margin-bottom: 2px; }
+.opt-card-sub   { font-size: 13px; font-weight: 300; color: var(--ink3); }
 .opt-card-tag   { font-size: 11px; font-weight: 500; color: var(--gold-d); background: var(--gold-l); padding: 3px 9px; border-radius: 20px; flex-shrink: 0; }
 .opt-card.selected .opt-card-tag { background: rgba(212,137,10,0.25); }
-
-.opt-radio {
-  width: 18px; height: 18px; border-radius: 50%;
-  border: 1.5px solid var(--border2);
-  flex-shrink: 0;
-  display: flex; align-items: center; justify-content: center;
-  transition: all var(--t);
-}
+.opt-radio { width: 18px; height: 18px; border-radius: 50%; border: 1.5px solid var(--border2); flex-shrink: 0; display: flex; align-items: center; justify-content: center; transition: all var(--t); }
 .opt-card.selected .opt-radio { background: var(--gold); border-color: var(--gold); }
 .opt-dot { width: 7px; height: 7px; border-radius: 50%; background: white; opacity: 0; transition: opacity var(--t); }
 .opt-card.selected .opt-dot { opacity: 1; }
-
-/* icon variant */
 .opt-card-icon { font-size: 18px; margin-bottom: 8px; display: block; }
 
-/* ── CHECK CARDS (multi-select) ── */
 .check-section { margin-bottom: 22px; }
-.check-section-label {
-  font-size: 10.5px; font-weight: 500; letter-spacing: 0.14em;
-  text-transform: uppercase; color: var(--ink3);
-  margin-bottom: 10px; padding-bottom: 8px;
-  border-bottom: 1px solid var(--border);
-}
-
+.check-section-label { font-size: 10.5px; font-weight: 500; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink3); margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
 .check-list { display: flex; flex-direction: column; gap: 8px; }
-
-.check-card {
-  background: var(--surface);
-  border: 1.5px solid var(--border);
-  border-radius: var(--r);
-  padding: 12px 16px;
-  cursor: pointer;
-  transition: border-color var(--t), background var(--t);
-  text-align: left;
-  width: 100%;
-  font-family: var(--sans);
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
+.check-card { background: var(--surface); border: 1.5px solid var(--border); border-radius: var(--r); padding: 12px 16px; cursor: pointer; transition: border-color var(--t), background var(--t); text-align: left; width: 100%; font-family: var(--sans); display: flex; align-items: center; gap: 12px; }
 .check-card:hover { border-color: var(--gold-d); background: var(--hover-surface); }
 .check-card.checked { border-color: var(--gold); background: var(--gold-l); }
-
-.check-box {
-  width: 18px; height: 18px; border-radius: 5px;
-  border: 1.5px solid var(--border2);
-  flex-shrink: 0;
-  display: flex; align-items: center; justify-content: center;
-  transition: all var(--t);
-  background: var(--surface);
-}
+.check-box { width: 18px; height: 18px; border-radius: 5px; border: 1.5px solid var(--border2); flex-shrink: 0; display: flex; align-items: center; justify-content: center; transition: all var(--t); background: var(--surface); }
 .check-card.checked .check-box { background: var(--gold); border-color: var(--gold); }
-
-.check-mark {
-  width: 10px; height: 6px;
-  border-left: 2px solid white;
-  border-bottom: 2px solid white;
-  transform: rotate(-45deg) translateY(-1px);
-  opacity: 0; transition: opacity var(--t);
-}
+.check-mark { width: 10px; height: 6px; border-left: 2px solid white; border-bottom: 2px solid white; transform: rotate(-45deg) translateY(-1px); opacity: 0; transition: opacity var(--t); }
 .check-card.checked .check-mark { opacity: 1; }
+.check-card-label { font-size: 14.5px; font-weight: 400; color: var(--ink); }
+.check-card-sub   { font-size: 13px; font-weight: 300; color: var(--ink3); margin-top: 1px; }
 
-.check-card-label { font-size: 13.5px; font-weight: 400; color: var(--ink); }
-.check-card-sub   { font-size: 12px; font-weight: 300; color: var(--ink3); margin-top: 1px; }
-
-/* ── NUMBER INPUT ── */
 .num-field { margin-bottom: 10px; }
 .num-label { font-size: 12px; font-weight: 500; letter-spacing: 0.04em; color: var(--ink2); margin-bottom: 6px; }
-
 .num-wrap { position: relative; }
 .num-in {
   width: 100%; padding: 14px 52px 14px 18px;
-  font-size: 24px; font-family: var(--serif); font-weight: 500;
+  font-size: 26px; font-family: var(--sans); font-weight: 500;
+  font-variant-numeric: tabular-nums; letter-spacing: -0.01em;
   color: var(--ink); background: var(--surface);
   border: 1.5px solid var(--border2); border-radius: var(--r);
   outline: none; transition: border-color var(--t);
   -moz-appearance: textfield; appearance: textfield;
 }
 .num-in::-webkit-inner-spin-button, .num-in::-webkit-outer-spin-button { -webkit-appearance: none; }
+.num-in::placeholder { color: var(--border2); font-weight: 300; opacity: 1; font-family: var(--sans); }
 .num-in:focus { border-color: var(--gold); }
-.num-unit {
-  position: absolute; right: 15px; top: 50%;
-  transform: translateY(-50%);
-  font-size: 12px; font-weight: 300; color: var(--ink3);
-}
+.num-unit { position: absolute; right: 15px; top: 50%; transform: translateY(-50%); font-size: 12px; font-weight: 300; color: var(--ink3); font-family: var(--sans); }
 
-/* ── SCREENS PAIR ── */
-.screens-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 12px; }
-@media (max-width: 420px) { .screens-pair { grid-template-columns: 1fr; } }
+.screens-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 16px; }
+@media (max-width: 480px) { .screens-pair { grid-template-columns: 1fr; } }
 
-/* ── TEXTAREA ── */
-.txt-area {
-  width: 100%; min-height: 120px;
-  padding: 15px 17px;
-  font-size: 14px; font-family: var(--sans); font-weight: 300;
-  color: var(--ink); background: var(--surface);
-  border: 1.5px solid var(--border2); border-radius: var(--r);
-  outline: none; resize: vertical; line-height: 1.7;
-  transition: border-color var(--t);
-  margin-bottom: 10px;
-}
-.txt-area::placeholder { color: var(--ink3); }
-.txt-area:focus { border-color: var(--gold); }
+.warn-box { background: var(--warn-bg); border: 1.5px solid var(--warn-bd); border-radius: var(--r); padding: 11px 14px; font-size: 13px; font-weight: 300; color: var(--warn-tx); margin-bottom: 14px; line-height: 1.5; }
+.info-note { font-size: 12.5px; font-weight: 300; color: var(--ink3); margin-bottom: 22px; padding: 10px 14px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r); line-height: 1.5; }
 
-/* ── DESCRIPTION PREVIEW ── */
-.desc-preview {
-  background: rgba(212,137,10,0.08);
-  border: 1.5px solid var(--gold-l);
-  border-radius: var(--r);
-  padding: 14px 17px;
-  margin-bottom: 20px;
+/* Custom rate preview card */
+.custom-rate-preview {
+  background: var(--gold-l); border: 1.5px solid var(--gold-bd);
+  border-radius: var(--r2); padding: 16px 18px; margin-bottom: 20px;
 }
-.desc-preview-label {
-  font-size: 10px; font-weight: 500; letter-spacing: 0.14em;
-  text-transform: uppercase; color: var(--gold-d); margin-bottom: 7px;
-}
-.desc-preview-text {
-  font-size: 13px; font-weight: 300; color: var(--ink2);
-  line-height: 1.6; font-style: italic;
-  overflow: hidden;
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  transition: -webkit-line-clamp 0.2s;
-}
-.desc-preview-text.clamped { -webkit-line-clamp: 3; }
-.desc-preview-text.expanded { -webkit-line-clamp: unset; }
-.read-more-btn {
-  background: none; border: none; padding: 0; margin-top: 7px;
-  font-family: var(--sans); font-size: 12px; font-weight: 500;
-  color: var(--gold-d); cursor: pointer; letter-spacing: 0.01em; display: block;
-}
-.read-more-btn:hover { color: var(--gold); }
+.crp-label { font-size: 10.5px; font-weight: 500; letter-spacing: 0.12em; text-transform: uppercase; color: var(--gold-d); margin-bottom: 4px; }
+.crp-val   { font-family: var(--serif); font-size: 30px; font-weight: 400; color: var(--gold-d); margin-bottom: 8px; font-variant-numeric: tabular-nums; }
+.crp-note  { font-size: 12px; font-weight: 300; color: var(--ink2); line-height: 1.6; margin-bottom: 8px; }
+.crp-compare { font-size: 12px; font-weight: 300; color: var(--ink3); }
+.crp-compare strong { font-weight: 500; color: var(--ink2); }
 
-/* ── BUTTONS ── */
-.btn {
-  width: 100%; padding: 14px 20px;
-  font-family: var(--sans); font-size: 14px; font-weight: 500;
-  letter-spacing: 0.03em; border: none; border-radius: var(--r);
-  cursor: pointer; transition: background var(--t), transform 0.1s;
-  margin-bottom: 10px; display: block;
-}
-.btn:active { transform: scale(0.99); }
+.btn-primary { display: block; width: 100%; padding: 15px 20px; background: var(--btn-bg); color: var(--btn-text); border: none; border-radius: var(--r); font-family: var(--sans); font-size: 14px; font-weight: 500; cursor: pointer; transition: background var(--t); text-align: center; }
+.btn-primary:hover:not(:disabled) { background: var(--btn-hover); }
+.btn-primary:disabled { opacity: 0.38; cursor: not-allowed; }
 
-.btn-primary { background: var(--btn-bg); color: var(--btn-text); }
-.btn-primary:hover { background: var(--btn-hover); }
-.btn-primary:disabled { background: var(--border2); color: var(--ink2); opacity: 0.55; cursor: not-allowed; transform: none; }
+.btn-gold { display: block; width: 100%; padding: 15px 20px; background: var(--gold); color: white; border: none; border-radius: var(--r); font-family: var(--sans); font-size: 14px; font-weight: 500; cursor: pointer; transition: opacity var(--t); text-align: center; }
+.btn-gold:hover:not(:disabled) { opacity: 0.88; }
+.btn-gold:disabled { opacity: 0.38; cursor: not-allowed; }
 
-.btn-gold { background: var(--gold); color: var(--btn-text); }
-.btn-gold:hover { background: var(--gold-d); }
-
-.btn-outline {
-  background: transparent; color: var(--ink2);
-  border: 1.5px solid var(--border2);
-  font-family: var(--sans); font-size: 13.5px; font-weight: 400;
-  cursor: pointer; transition: all var(--t);
-}
-.btn-outline:hover { border-color: var(--ink); color: var(--ink); }
-
-.back-btn {
-  display: inline-flex; align-items: center; gap: 5px;
-  font-size: 13px; font-weight: 300; color: var(--ink3);
-  background: none; border: none; cursor: pointer;
-  padding: 0; margin-bottom: 24px; transition: color var(--t);
-  font-family: var(--sans);
-}
+.back-btn { display: inline-flex; align-items: center; gap: 5px; font-size: 12.5px; font-weight: 300; color: var(--ink3); background: none; border: none; cursor: pointer; margin-bottom: 24px; padding: 0; font-family: var(--sans); transition: color var(--t); }
 .back-btn:hover { color: var(--ink2); }
 
-.skip-link {
-  display: block; text-align: center;
-  font-size: 12.5px; font-weight: 300; color: var(--ink3);
-  cursor: pointer; text-decoration: underline; text-underline-offset: 3px;
-  background: none; border: none; font-family: var(--sans);
-}
+.skip-link { display: block; text-align: center; margin-top: 12px; font-size: 12.5px; font-weight: 300; color: var(--ink3); cursor: pointer; text-decoration: underline; text-underline-offset: 3px; background: none; border: none; font-family: var(--sans); }
 .skip-link:hover { color: var(--ink2); }
 
-/* ── WARN BOX ── */
-.warn-box {
-  background: var(--warn-bg); border: 1px solid var(--warn-bd);
-  border-radius: 9px; padding: 11px 15px;
-  font-size: 12.5px; font-weight: 300; color: var(--warn-tx);
-  line-height: 1.55; margin-bottom: 14px;
-}
-
-.info-note {
-  font-size: 12px; font-weight: 300; color: var(--ink3);
-  line-height: 1.55; margin-bottom: 22px;
-}
-
-/* ── AI LOADING ── */
-.ai-loading {
-  display: flex; flex-direction: column; align-items: center;
-  justify-content: center; padding: 56px 20px; gap: 16px; text-align: center;
-}
-.spinner {
-  width: 34px; height: 34px;
-  border: 2px solid var(--border);
-  border-top-color: var(--gold);
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
-}
-@keyframes spin { to { transform: rotate(360deg); } }
-.ai-loading-text { font-size: 14px; font-weight: 300; color: var(--ink2); }
-.ai-loading-sub  { font-size: 12.5px; color: var(--ink3); }
-
-/* ── AI CONFIRM ── */
-.sc-section { margin-bottom: 22px; }
-.sc-section-hd {
-  display: flex; align-items: center; justify-content: space-between;
-  margin-bottom: 10px;
-}
-.sc-section-title {
-  font-size: 10.5px; font-weight: 500; letter-spacing: 0.14em;
-  text-transform: uppercase; color: var(--ink3);
-}
-.sc-badge {
-  font-size: 11px; color: var(--ink3);
-  background: var(--bg); border: 1px solid var(--border);
-  border-radius: 20px; padding: 2px 10px;
-}
-.sc-list { display: flex; flex-direction: column; gap: 7px; }
-.sc-item {
-  display: flex; align-items: flex-start; justify-content: space-between;
-  gap: 10px; background: var(--surface);
-  border: 1.5px solid var(--border); border-radius: 10px;
-  padding: 11px 14px; transition: all var(--t);
-}
-.sc-item.removed { opacity: 0.38; border-style: dashed; }
-.sc-item-left { flex: 1; }
-.sc-item-name  { font-size: 13.5px; font-weight: 500; color: var(--ink); display: block; margin-bottom: 3px; }
-.sc-item-why   { font-size: 12px; font-weight: 300; color: var(--ink3); line-height: 1.45; }
-.sc-badge-p    { font-size: 10px; padding: 2px 8px; border-radius: 20px; background: var(--gold-l); color: var(--gold-d); border: 1px solid var(--gold-bd); flex-shrink: 0; margin-top: 2px; }
-.sc-badge-s    { font-size: 10px; padding: 2px 8px; border-radius: 20px; background: var(--purple-bg); color: var(--purple-text); border: 1px solid var(--purple-bd); flex-shrink: 0; margin-top: 2px; }
-.sc-remove  { background: none; border: none; cursor: pointer; color: var(--ink3); font-size: 17px; padding: 0 2px; line-height: 1; transition: color var(--t); flex-shrink: 0; }
-.sc-remove:hover { color: var(--danger); }
-.sc-restore { background: none; border: none; cursor: pointer; font-size: 12px; color: var(--gold); text-decoration: underline; flex-shrink: 0; font-family: var(--sans); padding: 0; }
-
-.confirm-summary {
-  display: grid; grid-template-columns: 1fr 1fr; gap: 9px;
-  margin-bottom: 24px;
-}
-.conf-cell { background: var(--surface); border: 1.5px solid var(--border); border-radius: 11px; padding: 13px 15px; }
-.conf-cell.accent { background: var(--gold-l); border-color: var(--gold-bd); grid-column: span 2; }
-.conf-num  { font-family: var(--serif); font-size: 26px; font-weight: 500; color: var(--gold-d); }
-.conf-lbl  { font-size: 12px; font-weight: 300; color: var(--ink2); margin-top: 2px; }
-
-.flows-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 22px; }
-@media (max-width: 480px) { .flows-grid { grid-template-columns: 1fr; } }
-.ff-card { background: var(--surface); border: 1.5px solid var(--border); border-radius: var(--r); padding: 16px 17px; }
-.ff-title { font-size: 10.5px; font-weight: 500; letter-spacing: 0.13em; text-transform: uppercase; color: var(--ink3); margin-bottom: 11px; }
-.ff-list { list-style: none; display: flex; flex-direction: column; gap: 7px; }
-.ff-list li { font-size: 13px; font-weight: 300; color: var(--ink); display: flex; align-items: flex-start; gap: 8px; line-height: 1.5; }
-.ff-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--gold); flex-shrink: 0; margin-top: 5px; }
-
-/* ── REVIEW BOX ── */
-.rev-box {
-  background: var(--surface); border: 1.5px solid var(--border);
-  border-radius: var(--r2); overflow: hidden; margin-bottom: 24px;
-}
-.rev-row {
-  display: flex; justify-content: space-between; align-items: baseline;
-  padding: 12px 17px; border-bottom: 1px solid var(--border); font-size: 13px;
-}
+.rev-box { background: var(--surface); border: 1.5px solid var(--border); border-radius: var(--r2); overflow: hidden; margin-bottom: 24px; }
+.rev-row { display: flex; justify-content: space-between; align-items: baseline; padding: 12px 17px; border-bottom: 1px solid var(--border); font-size: 13px; }
 .rev-row:last-child { border-bottom: none; }
 .rev-k { font-weight: 300; color: var(--ink3); }
 .rev-v { font-weight: 500; color: var(--ink); text-align: right; max-width: 260px; }
-.rev-ed {
-  font-size: 11.5px; color: var(--gold); cursor: pointer;
-  margin-left: 9px; font-weight: 400;
-  text-decoration: underline; text-underline-offset: 2px;
-}
+.rev-ed { font-size: 11.5px; color: var(--gold); cursor: pointer; margin-left: 9px; font-weight: 400; text-decoration: underline; text-underline-offset: 2px; }
 .rev-ed:hover { color: var(--gold-d); }
 
-/* ── ENTRY MODE CARDS ── */
 .entry-grid { display: flex; flex-direction: column; gap: 12px; margin-bottom: 24px; }
-
-.entry-card {
-  background: var(--surface); border: 1.5px solid var(--border);
-  border-radius: var(--r2); padding: 22px 24px 20px;
-  cursor: pointer; transition: border-color var(--t), background var(--t), transform 0.12s;
-  text-align: left; width: 100%; font-family: var(--sans);
-  display: block; position: relative;
-}
+.entry-card { background: var(--surface); border: 1.5px solid var(--border); border-radius: var(--r2); padding: 22px 24px 20px; cursor: pointer; transition: border-color var(--t), background var(--t), transform 0.12s; text-align: left; width: 100%; font-family: var(--sans); display: block; position: relative; }
 .entry-card:hover { border-color: var(--gold-d); background: var(--hover-surface); transform: translateY(-1px); }
 .entry-card:active { transform: scale(0.99); }
 .entry-card.featured { border-color: var(--featured-bd); }
-
-.ec-badge {
-  display: inline-block; font-size: 10px; font-weight: 500;
-  letter-spacing: 0.08em; text-transform: uppercase;
-  padding: 3px 9px; border-radius: 20px;
-  margin-bottom: 10px;
-  background: var(--gold-l); color: var(--gold-d);
-}
-.ec-num {
-  font-family: var(--serif); font-size: 38px; font-weight: 400;
-  color: var(--border2); line-height: 1; margin-bottom: 7px;
-}
+.ec-num { font-family: var(--serif); font-size: 38px; font-weight: 400; color: var(--border2); line-height: 1; margin-bottom: 7px; }
 .ec-title { font-size: 16px; font-weight: 500; color: var(--ink); margin-bottom: 5px; }
 .ec-desc  { font-size: 13px; font-weight: 300; color: var(--ink2); line-height: 1.55; }
-.ec-arrow {
-  position: absolute; right: 22px; top: 50%; transform: translateY(-50%);
-  font-size: 20px; color: var(--border2); transition: color var(--t), transform var(--t);
-}
+.ec-arrow { position: absolute; right: 22px; top: 50%; transform: translateY(-50%); font-size: 20px; color: var(--border2); transition: color var(--t), transform var(--t); }
 .entry-card:hover .ec-arrow { color: var(--gold); transform: translateY(-50%) translateX(3px); }
+
+/* ── ROLE SELECTOR ── */
+.role-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; margin-bottom: 24px; }
+@media (max-width: 480px) { .role-grid { grid-template-columns: 1fr; } }
+.role-card { background: var(--surface); border: 1.5px solid var(--border); border-radius: var(--r2); padding: 16px 18px 14px; cursor: pointer; transition: border-color var(--t), background var(--t), transform 0.1s; text-align: left; width: 100%; font-family: var(--sans); }
+.role-card:hover { border-color: var(--gold-d); background: var(--hover-surface); transform: translateY(-1px); }
+.role-card:active { transform: scale(0.99); }
+.role-card.selected { border-color: var(--gold); background: var(--gold-l); }
+.role-icon { font-size: 20px; margin-bottom: 9px; display: block; }
+.role-label { font-size: 14px; font-weight: 500; color: var(--ink); display: block; margin-bottom: 3px; }
+.role-sub   { font-size: 12px; font-weight: 300; color: var(--ink3); }
 
 /* ── RESULTS ── */
 .result-wrap { animation: screenIn 0.4s cubic-bezier(.4,0,.2,1) both; }
+.range-hero { background: var(--sbg); border: 1.5px solid var(--success-bd); border-radius: var(--r2); padding: 30px 28px; margin-bottom: 14px; }
+.rh-eyebrow { font-size: 11px; font-weight: 500; letter-spacing: 0.15em; text-transform: uppercase; color: var(--success); opacity: 0.65; margin-bottom: 9px; }
+.rh-range   { font-family: var(--serif); font-size: clamp(32px, 5.5vw, 50px); font-weight: 500; color: var(--success); line-height: 1.05; margin-bottom: 7px; }
+.rh-hrs     { font-size: 14px; font-weight: 300; color: var(--success); opacity: 0.75; }
+.rh-note    { font-size: 12.5px; font-weight: 300; color: var(--success); opacity: 0.55; margin-top: 5px; line-height: 1.5; }
 
-.range-hero {
-  background: var(--sbg); border: 1.5px solid var(--success-bd);
-  border-radius: var(--r2); padding: 30px 28px; margin-bottom: 14px;
-}
-.rh-eyebrow { font-size: 10px; font-weight: 500; letter-spacing: 0.15em; text-transform: uppercase; color: var(--success); opacity: 0.65; margin-bottom: 9px; }
-.rh-range   { font-family: var(--serif); font-size: clamp(30px, 5.5vw, 48px); font-weight: 500; color: var(--success); line-height: 1.05; margin-bottom: 7px; }
-.rh-hrs     { font-size: 13.5px; font-weight: 300; color: var(--success); opacity: 0.75; }
-.rh-note    { font-size: 12px; font-weight: 300; color: var(--success); opacity: 0.55; margin-top: 5px; line-height: 1.5; }
+.result-card { background: var(--surface); border: 1.5px solid var(--border); border-radius: var(--r2); padding: 22px 22px 18px; margin-bottom: 13px; }
+.rc-title { font-size: 10px; font-weight: 500; letter-spacing: 0.15em; text-transform: uppercase; color: var(--ink3); margin-bottom: 16px; }
 
-.result-card {
-  background: var(--surface); border: 1.5px solid var(--border);
-  border-radius: var(--r2); padding: 22px 22px 18px; margin-bottom: 13px;
-}
-.rc-title {
-  font-size: 10px; font-weight: 500; letter-spacing: 0.15em;
-  text-transform: uppercase; color: var(--ink3); margin-bottom: 16px;
-}
-
-.bk-row {
-  display: flex; justify-content: space-between; align-items: baseline;
-  padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 13px;
-}
+.bk-row { display: flex; justify-content: space-between; align-items: baseline; padding: 9px 0; border-bottom: 1px solid var(--border); font-size: 13.5px; }
 .bk-row:last-child { border-bottom: none; }
 .bk-l    { font-weight: 300; color: var(--ink2); }
-.bk-note { font-size: 11px; color: var(--ink3); margin-top: 2px; }
-.bk-a    { font-family: var(--serif); font-size: 15px; color: var(--ink); font-weight: 500; white-space: nowrap; margin-left: 12px; }
-
-.bk-total {
-  display: flex; justify-content: space-between; align-items: baseline;
-  padding-top: 12px; margin-top: 4px; border-top: 1.5px solid var(--border);
-  font-size: 13.5px; font-weight: 500;
-}
-.bk-total-a { font-family: var(--serif); font-size: 22px; color: var(--gold); }
+.bk-note { font-size: 11.5px; color: var(--ink3); margin-top: 2px; }
+.bk-a    { font-family: var(--serif); font-size: 16px; color: var(--ink); font-weight: 500; white-space: nowrap; margin-left: 12px; font-variant-numeric: tabular-nums; }
+.bk-subtotal-row { display: flex; justify-content: space-between; align-items: baseline; border-top: 1.5px solid var(--border); margin-top: 6px; padding-top: 10px; font-size: 13px; }
+.bk-subtotal-l { font-weight: 500; color: var(--ink2); }
+.bk-subtotal-a { font-family: var(--serif); font-size: 16px; color: var(--ink2); font-weight: 500; font-variant-numeric: tabular-nums; }
+.bk-total { display: flex; justify-content: space-between; align-items: baseline; padding-top: 12px; margin-top: 4px; border-top: 1.5px solid var(--border); font-size: 13.5px; font-weight: 500; }
+.bk-total-a { font-family: var(--serif); font-size: 22px; color: var(--gold); font-variant-numeric: tabular-nums; }
 
 .hrs-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
 .hrs-cell { background: var(--bg); border-radius: 9px; padding: 13px 14px; }
-.hrs-n    { font-family: var(--serif); font-size: 24px; color: var(--gold-d); font-weight: 500; }
+.hrs-n    { font-family: var(--serif); font-size: 24px; color: var(--gold-d); font-weight: 500; font-variant-numeric: tabular-nums; }
 .hrs-l    { font-size: 12px; font-weight: 300; color: var(--ink2); margin-top: 3px; }
 
-.ai-screens-cloud { display: flex; flex-wrap: wrap; gap: 7px; }
-.ai-tag-p { padding: 4px 11px; background: var(--gold-l); border: 1px solid var(--gold-bd); border-radius: 6px; font-size: 12px; color: var(--gold-d); }
-.ai-tag-s { padding: 4px 11px; background: var(--purple-bg); border: 1px solid var(--purple-bd); border-radius: 6px; font-size: 12px; color: var(--purple-text); }
-
-.jtext {
-  font-size: 13.5px; font-weight: 300; color: var(--ink);
-  line-height: 1.9; white-space: pre-wrap;
-}
+.jtext { font-size: 13.5px; font-weight: 300; color: var(--ink); line-height: 1.9; white-space: pre-wrap; }
 
 .res-acts { display: flex; gap: 9px; margin-top: 14px; flex-wrap: wrap; }
-.act {
-  flex: 1; min-width: 130px; padding: 11px 16px;
-  font-family: var(--sans); font-size: 13px; font-weight: 400;
-  border-radius: 9px; cursor: pointer; transition: all var(--t); text-align: center;
-}
+.act { flex: 1; min-width: 130px; padding: 11px 16px; font-family: var(--sans); font-size: 13px; font-weight: 400; border-radius: 9px; cursor: pointer; transition: all var(--t); text-align: center; }
 .act-p { background: var(--btn-bg); color: var(--btn-text); border: none; }
 .act-p:hover { background: var(--btn-hover); }
 .act-g { background: var(--surface); color: var(--ink); border: 1.5px solid var(--border); }
 .act-g:hover { border-color: var(--ink); }
 .act-g.copied { border-color: var(--success); color: var(--success); }
-.act-save { background: var(--gold-l); color: var(--gold-d); border: 1.5px solid var(--gold-bd); }
-.act-save:hover { background: var(--save-hover); border-color: var(--gold-d); }
 
-.restart {
-  display: block; text-align: center; margin-top: 16px;
-  font-size: 12.5px; font-weight: 300; color: var(--ink3);
-  cursor: pointer; text-decoration: underline; text-underline-offset: 3px;
-  background: none; border: none; font-family: var(--sans);
-}
+.restart { display: block; text-align: center; margin-top: 16px; font-size: 12.5px; font-weight: 300; color: var(--ink3); cursor: pointer; text-decoration: underline; text-underline-offset: 3px; background: none; border: none; font-family: var(--sans); }
 .restart:hover { color: var(--ink2); }
 
-/* ── SIDEBAR ── */
-.sb-wordmark {
-  font-family: var(--serif); font-size: 14px; font-weight: 500;
-  letter-spacing: 0.06em; color: var(--ink); margin-bottom: 28px;
-}
+.sb-wordmark { font-family: var(--serif); font-size: 14px; font-weight: 500; letter-spacing: 0.06em; color: var(--ink); margin-bottom: 28px; }
 .sb-wordmark span { color: var(--gold); }
-
 .sb-stat { margin-bottom: 18px; }
 .sb-stat-label { font-size: 11px; font-weight: 300; color: var(--ink3); margin-bottom: 3px; }
 .sb-stat-val   { font-family: var(--serif); font-size: 26px; font-weight: 500; color: var(--ink); line-height: 1; }
 .sb-stat-val.gold { color: var(--gold); }
-
 .sb-div  { height: 1px; background: var(--border); margin: 16px 0; }
-.sb-item { display: flex; justify-content: space-between; align-items: baseline; font-size: 12.5px; padding: 3px 0; }
+.sb-item { display: flex; justify-content: space-between; align-items: baseline; font-size: 13px; padding: 3px 0; }
 .sb-item-l { font-weight: 300; color: var(--ink3); }
 .sb-item-v { font-weight: 400; color: var(--ink2); }
+.sb-note { margin-top: 16px; font-size: 12px; font-weight: 300; color: var(--ink3); line-height: 1.6; padding: 10px 12px; background: var(--surface); border-radius: 8px; }
 
-.sb-note {
-  margin-top: 16px; font-size: 11.5px; font-weight: 300; color: var(--ink3);
-  line-height: 1.6; padding: 10px 12px; background: var(--surface); border-radius: 8px;
-}
-
-/* ── MOBILE BAR ── */
-.mob-bar {
-  display: none;
-  position: fixed; bottom: 0; left: 0; right: 0;
-  background: var(--mob-bg); padding: 15px 22px;
-  z-index: 100; cursor: pointer; border-top: 1px solid var(--border);
-}
-.mob-bar-inner { display: flex; justify-content: space-between; align-items: center; }
+.mob-bar { display: none; position: fixed; bottom: 0; left: 0; right: 0; background: var(--mob-bg); padding: 13px 22px 16px; z-index: 100; cursor: pointer; border-top: 1px solid var(--border); }
+.mob-bar-inner { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.mob-bar-left { flex: 1; min-width: 0; }
 .mob-bar-left-label { font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--mob-muted); margin-bottom: 2px; }
-.mob-bar-price { font-family: var(--serif); font-size: 20px; font-weight: 500; color: var(--mob-text); }
-.mob-bar-hint  { font-size: 11px; color: var(--mob-hint); }
+.mob-bar-price { font-family: var(--serif); font-size: 20px; font-weight: 500; color: var(--mob-text); line-height: 1.15; }
+.mob-bar-context { font-size: 13px; font-weight: 400; color: var(--mob-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.3; }
+.mob-bar-hint  { font-size: 11px; color: var(--mob-hint); flex-shrink: 0; }
+@media (max-width: 768px) { .mob-bar { display: block; } }
 
-@media (max-width: 768px) {
-  .mob-bar { display: block; }
-}
-
-/* ── BOTTOM SHEET ── */
-.sheet-overlay {
-  position: fixed; inset: 0;
-  background: rgba(0,0,0,0.45);
-  z-index: 200; display: flex; align-items: flex-end;
-  animation: overlayIn 0.22s ease both;
-}
+.sheet-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 200; display: flex; align-items: flex-end; animation: overlayIn 0.22s ease both; }
 @keyframes overlayIn { from { opacity: 0; } to { opacity: 1; } }
-
-.sheet {
-  background: var(--panel); border-radius: 18px 18px 0 0;
-  padding: 20px 22px 36px; width: 100%;
-  max-height: 78vh; overflow-y: auto;
-  animation: sheetUp 0.28s cubic-bezier(.4,0,.2,1) both;
-}
+.sheet { background: var(--panel); border-radius: 18px 18px 0 0; padding: 20px 22px 36px; width: 100%; max-height: 78vh; overflow-y: auto; animation: sheetUp 0.28s cubic-bezier(.4,0,.2,1) both; }
 @keyframes sheetUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+.sheet-handle { width: 38px; height: 4px; background: var(--border2); border-radius: 2px; margin: 0 auto 20px; }
 
-.sheet-handle {
-  width: 38px; height: 4px; background: var(--border2);
-  border-radius: 2px; margin: 0 auto 20px;
-}
-
-/* ── SUSTAINABILITY STEP ── */
-.sus-block {
-  background: var(--surface); border: 1.5px solid var(--border);
-  border-radius: var(--r2); padding: 18px 20px; margin-bottom: 14px;
-}
+.sus-block { background: var(--surface); border: 1.5px solid var(--border); border-radius: var(--r2); padding: 18px 20px; margin-bottom: 14px; }
 .sus-row-hd { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 10px; }
 .sus-lbl { font-size: 13px; font-weight: 500; color: var(--ink2); }
-.sus-val { font-family: var(--serif); font-size: 22px; font-weight: 500; color: var(--gold-d); }
-.sus-slider {
-  width: 100%; accent-color: var(--gold); margin-bottom: 6px;
-  height: 3px; cursor: pointer;
-}
-.sus-range-labels {
-  display: flex; justify-content: space-between;
-  font-size: 11px; font-weight: 300; color: var(--ink3); margin-bottom: 10px;
-}
-.sus-preview {
-  font-size: 13px; font-weight: 300; color: var(--ink2);
-  background: var(--gold-l); border: 1px solid var(--gold-bd); border-radius: 8px;
-  padding: 9px 13px; margin-bottom: 8px; line-height: 1.5;
-}
+.sus-val { font-family: var(--serif); font-size: 22px; font-weight: 500; font-variant-numeric: tabular-nums; color: var(--gold-d); }
+.sus-slider { width: 100%; accent-color: var(--gold); margin-bottom: 6px; height: 3px; cursor: pointer; }
+.sus-range-labels { display: flex; justify-content: space-between; font-size: 11px; font-weight: 300; color: var(--ink3); margin-bottom: 10px; }
+.sus-context-box { background: var(--bg); border-radius: 8px; padding: 11px 13px; margin-bottom: 10px; }
+.sus-ctx-q { font-size: 11px; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink3); margin-bottom: 5px; }
+.sus-ctx-a { font-size: 12.5px; font-weight: 300; color: var(--ink2); line-height: 1.65; }
+.sus-preview { font-size: 13px; font-weight: 300; color: var(--ink2); background: var(--gold-l); border: 1px solid var(--gold-bd); border-radius: 8px; padding: 9px 13px; margin-bottom: 8px; line-height: 1.5; }
 .sus-preview strong { font-weight: 500; color: var(--gold-d); }
 .sus-note { font-size: 12px; font-weight: 300; color: var(--ink3); line-height: 1.55; }
 
-/* GST toggle */
-.gst-row {
-  display: flex; align-items: center; justify-content: space-between;
-  gap: 14px; background: var(--surface);
-  border: 1.5px solid var(--border); border-radius: var(--r2);
-  padding: 15px 18px; margin-bottom: 22px; cursor: pointer;
-  transition: border-color var(--t), background var(--t);
-}
+.gst-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; background: var(--surface); border: 1.5px solid var(--border); border-radius: var(--r2); padding: 15px 18px; margin-bottom: 22px; cursor: pointer; transition: border-color var(--t), background var(--t); }
 .gst-row:hover  { border-color: var(--gold-d); }
 .gst-row.gst-on { border-color: var(--gold); background: var(--gold-l); }
 .gst-label { font-size: 14px; font-weight: 500; color: var(--ink); margin-bottom: 2px; }
 .gst-sub   { font-size: 12px; font-weight: 300; color: var(--ink3); }
-.tog-track {
-  width: 40px; height: 22px; border-radius: 11px; background: var(--border2);
-  flex-shrink: 0; position: relative; transition: background var(--t);
-}
+.tog-track { width: 40px; height: 22px; border-radius: 11px; background: var(--border2); flex-shrink: 0; position: relative; transition: background var(--t); }
 .gst-row.gst-on .tog-track { background: var(--gold); }
-.tog-thumb {
-  position: absolute; top: 3px; left: 3px; width: 16px; height: 16px;
-  border-radius: 50%; background: white;
-  box-shadow: 0 1px 3px rgba(0,0,0,.18);
-  transition: transform var(--t);
-}
+.tog-thumb { position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: white; box-shadow: 0 1px 3px rgba(0,0,0,.18); transition: transform var(--t); }
 .tog-thumb.tog-on { transform: translateX(18px); }
 
-/* ── RATE TRANSPARENCY GRID ── */
 .rate-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
 .rate-cell { background: var(--bg); border-radius: 9px; padding: 13px 14px; }
-.rate-val  { font-family: var(--serif); font-size: 17px; color: var(--gold-d); font-weight: 500; line-height: 1.2; margin-bottom: 3px; }
+.rate-val  { font-family: var(--serif); font-size: 18px; color: var(--gold-d); font-weight: 500; line-height: 1.2; margin-bottom: 3px; }
 .rate-lbl  { font-size: 12px; font-weight: 300; color: var(--ink2); }
 
-/* ── RESULTS subtotal separator ── */
-.bk-subtotal-row {
-  display: flex; justify-content: space-between; align-items: baseline;
-  border-top: 1.5px solid var(--border); margin-top: 6px; padding-top: 10px;
-  font-size: 13px;
+/* Input mapping info box */
+.mapping-note {
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--r);
+  padding: 10px 14px; margin-bottom: 18px;
+  font-size: 12px; font-weight: 300; color: var(--ink3); line-height: 1.5;
 }
-.bk-subtotal-l { font-weight: 500; color: var(--ink2); }
-.bk-subtotal-a { font-family: var(--serif); font-size: 16px; color: var(--ink2); font-weight: 500; }
+.mapping-note strong { color: var(--gold-d); font-weight: 500; }
 
-/* ── NAV PILLS (inside estimator header) ── */
-.nav-pill {
-  padding: 5px 12px; border-radius: 20px; font-size: 12px; font-weight: 400;
-  background: var(--bg); border: 1.5px solid var(--border); color: var(--ink3);
-  cursor: pointer; font-family: var(--sans); transition: all var(--t);
+/* ── MAKER FOOTER ── */
+.maker-footer {
+  width: 100%;
+  max-width: 760px;
+  padding: 56px 40px 48px;
+  text-align: center;
+  border-top: 1px solid var(--border);
+  margin-top: 40px;
 }
-.nav-pill:hover { border-color: var(--border2); color: var(--ink); }
-
-/* Share button */
-.act-share {
-  background: var(--blue-bg); color: var(--blue-text); border: 1.5px solid var(--blue-bd);
-  flex: 1; min-width: 130px; padding: 11px 16px; font-family: var(--sans);
-  font-size: 13px; font-weight: 400; border-radius: 9px; cursor: pointer;
-  transition: all var(--t); text-align: center;
+@media (max-width: 900px) {
+  .maker-footer { padding: 48px 24px 80px; }
 }
-.act-share:hover { background: var(--blue-hover); border-color: var(--blue-text); }
-
-/* Shared quote page */
-.quote-page {
-  max-width: 720px; margin: 0 auto; padding: 48px 40px 80px;
-  animation: screenIn 0.35s cubic-bezier(.4,0,.2,1) both;
+.mf-eyebrow {
+  font-size: 10.5px; font-weight: 500; letter-spacing: 0.18em;
+  text-transform: uppercase; color: var(--ink3); margin-bottom: 14px;
 }
-@media (max-width: 600px) { .quote-page { padding: 28px 20px 60px; } }
-.quote-badge {
+.mf-name {
+  font-family: var(--serif); font-size: clamp(32px, 5vw, 44px);
+  font-weight: 600; color: var(--ink); line-height: 1; margin-bottom: 6px;
+}
+.mf-role {
+  font-size: 11px; font-weight: 500; letter-spacing: 0.18em;
+  text-transform: uppercase; color: var(--ink3); margin-bottom: 22px;
+}
+.mf-quote {
+  font-family: var(--serif); font-style: italic;
+  font-size: clamp(15px, 2.2vw, 17px); font-weight: 400;
+  color: var(--ink2); line-height: 1.75; max-width: 420px;
+  margin: 0 auto 28px;
+}
+.mf-btn {
   display: inline-flex; align-items: center; gap: 7px;
-  background: var(--sbg); border: 1px solid var(--success-bd); border-radius: 20px;
-  padding: 5px 13px; font-size: 11.5px; font-weight: 500; color: var(--success);
-  letter-spacing: 0.05em; margin-bottom: 22px;
+  background: var(--ink); color: var(--btn-text);
+  font-family: var(--sans); font-size: 13.5px; font-weight: 500;
+  padding: 12px 22px; border-radius: 100px; border: none;
+  cursor: pointer; text-decoration: none;
+  transition: background var(--t), transform 0.15s;
 }
-.quote-title {
-  font-family: var(--serif); font-size: clamp(28px, 5vw, 44px); font-weight: 500;
-  line-height: 1.1; margin-bottom: 10px; color: var(--ink);
-}
-.quote-title em { color: var(--gold); font-style: italic; }
-.quote-sub { font-size: 13.5px; font-weight: 300; color: var(--ink3); margin-bottom: 32px; line-height: 1.6; }
-.quote-stats {
-  display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 24px;
-}
-@media (max-width: 480px) { .quote-stats { grid-template-columns: 1fr 1fr; } }
-.qs-cell { background: var(--surface); border: 1.5px solid var(--border); border-radius: var(--r2); padding: 16px 17px; }
-.qs-val  { font-family: var(--serif); font-size: 22px; font-weight: 500; color: var(--gold-d); margin-bottom: 3px; }
-.qs-lbl  { font-size: 12px; font-weight: 300; color: var(--ink3); }
-.quote-range {
-  background: var(--sbg); border: 1.5px solid var(--success-bd);
-  border-radius: var(--r2); padding: 26px 26px; margin-bottom: 22px;
-}
-.qr-label { font-size: 10px; font-weight: 500; letter-spacing: 0.15em; text-transform: uppercase; color: var(--success); opacity: 0.7; margin-bottom: 8px; }
-.qr-range { font-family: var(--serif); font-size: clamp(28px, 5vw, 44px); font-weight: 500; color: var(--success); margin-bottom: 5px; }
-.qr-note  { font-size: 12px; font-weight: 300; color: var(--success); opacity: 0.6; }
-.quote-just {
-  background: var(--surface); border: 1.5px solid var(--border);
-  border-radius: var(--r2); padding: 22px 22px; margin-bottom: 22px;
-}
-.qj-title { font-size: 10px; font-weight: 500; letter-spacing: 0.15em; text-transform: uppercase; color: var(--ink3); margin-bottom: 14px; }
-.qj-text  { font-size: 13.5px; font-weight: 300; color: var(--ink); line-height: 1.9; white-space: pre-wrap; }
-.quote-footer {
-  text-align: center; padding-top: 24px; border-top: 1px solid var(--border);
-  font-size: 12px; font-weight: 300; color: var(--ink3);
-}
-.quote-footer span { font-family: var(--serif); font-weight: 500; color: var(--gold-d); }
-
-/* SaaS screens (history, account, auth) */
-.saas-page { max-width: 760px; margin: 0 auto; padding: 40px 40px 100px; animation: screenIn 0.3s ease both; }
-@media (max-width: 600px) { .saas-page { padding: 24px 20px 80px; } }
-.sp-title { font-family: var(--serif); font-size: clamp(24px,4vw,36px); font-weight: 500; margin-bottom: 6px; }
-.sp-title em { font-style: italic; color: var(--gold); }
-.sp-sub { font-size: 13.5px; font-weight: 300; color: var(--ink3); margin-bottom: 28px; line-height: 1.6; }
-
-/* Auth card */
-.auth-center { min-height: calc(100vh - 52px); display: flex; align-items: center; justify-content: center; padding: 24px; }
-.auth-card {
-  background: var(--surface); border: 1.5px solid var(--border); border-radius: 20px;
-  padding: 38px 34px; width: 100%; max-width: 400px;
-  box-shadow: 0 8px 40px rgba(0,0,0,.07);
-}
-.auth-logo { font-family: var(--serif); font-size: 20px; font-weight: 500; margin-bottom: 4px; }
-.auth-logo span { color: var(--gold); }
-.auth-tagline { font-size: 12.5px; font-weight: 300; color: var(--ink3); margin-bottom: 26px; line-height: 1.55; }
-.auth-heading { font-family: var(--serif); font-size: 22px; font-weight: 500; margin-bottom: 18px; }
-.auth-field { margin-bottom: 13px; }
-.auth-field-label { font-size: 11.5px; font-weight: 500; color: var(--ink2); margin-bottom: 5px; letter-spacing: 0.03em; }
-.auth-input {
-  width: 100%; padding: 11px 13px; font-size: 14px; font-family: var(--sans); font-weight: 300;
-  color: var(--ink); background: var(--bg); border: 1.5px solid var(--border2);
-  border-radius: var(--r); outline: none; transition: border-color var(--t);
-}
-.auth-input:focus { border-color: var(--gold); background: var(--surface); }
-.auth-submit {
-  width: 100%; padding: 12px; margin-top: 6px; font-size: 14px; font-weight: 500;
-  font-family: var(--sans); border: none; border-radius: var(--r);
-  background: var(--gold); color: white; cursor: pointer; transition: background var(--t);
-}
-.auth-submit:hover    { background: var(--gold-d); }
-.auth-submit:disabled { background: var(--border2); cursor: not-allowed; }
-.auth-switch { margin-top: 16px; text-align: center; font-size: 13px; font-weight: 300; color: var(--ink3); }
-.auth-switch button { background: none; border: none; color: var(--gold); font-weight: 500; cursor: pointer; font-family: var(--sans); font-size: 13px; }
-.auth-error { background: var(--danger-l); border: 1px solid var(--danger-bd); border-radius: 9px; padding: 10px 13px; font-size: 13px; font-weight: 300; color: var(--danger); margin-bottom: 13px; }
-.auth-anon { display: block; text-align: center; margin-top: 14px; font-size: 12.5px; font-weight: 300; color: var(--ink3); cursor: pointer; background: none; border: none; font-family: var(--sans); text-decoration: underline; text-underline-offset: 3px; }
-.auth-anon:hover { color: var(--ink2); }
-
-/* Global nav bar */
-.g-nav {
-  position: sticky; top: 0; z-index: 400; height: 52px;
-  background: var(--panel); border-bottom: 1px solid var(--border);
-  display: flex; align-items: center; justify-content: space-between; padding: 0 28px;
-}
-.g-nav-logo { font-family: var(--serif); font-size: 16px; font-weight: 500; cursor: pointer; letter-spacing: 0.05em; }
-.g-nav-logo span { color: var(--gold); }
-.g-nav-links { display: flex; align-items: center; gap: 2px; }
-.g-nav-btn {
-  padding: 5px 12px; border-radius: 8px; font-size: 12.5px; font-weight: 400;
-  color: var(--ink3); cursor: pointer; border: none; background: none;
-  font-family: var(--sans); transition: background var(--t), color var(--t);
-}
-.g-nav-btn:hover { background: var(--bg); color: var(--ink); }
-.g-nav-btn.active { background: var(--gold-l); color: var(--gold-d); font-weight: 500; }
-.g-nav-btn.danger:hover { background: var(--danger-l); color: var(--danger); }
-@media (max-width: 500px) { .g-nav { padding: 0 16px; } .g-nav-btn { padding: 5px 9px; font-size: 12px; } }
-
-/* History list */
-.hist-list { display: flex; flex-direction: column; gap: 10px; }
-.hist-card {
-  background: var(--surface); border: 1.5px solid var(--border); border-radius: var(--r2);
-  padding: 16px 18px; display: flex; align-items: center; gap: 14px;
-  transition: border-color var(--t);
-}
-.hist-card:hover { border-color: var(--border2); }
-.hist-info { flex: 1; min-width: 0; }
-.hist-type { font-size: 14px; font-weight: 500; color: var(--ink); margin-bottom: 3px; }
-.hist-meta { font-size: 12px; font-weight: 300; color: var(--ink3); }
-.hist-range { font-family: var(--serif); font-size: 17px; font-weight: 500; color: var(--success); white-space: nowrap; flex-shrink: 0; }
-.hist-btns { display: flex; gap: 5px; flex-shrink: 0; }
-.hbtn {
-  padding: 5px 11px; border-radius: 7px; font-size: 12px; font-weight: 400;
-  cursor: pointer; font-family: var(--sans); border: 1.5px solid var(--border);
-  background: var(--surface); color: var(--ink2); transition: all var(--t);
-}
-.hbtn:hover { border-color: var(--border2); color: var(--ink); }
-.hbtn.primary { background: var(--btn-bg); color: var(--btn-text); border-color: var(--btn-bg); }
-.hbtn.primary:hover { background: var(--btn-hover); }
-.hbtn.del:hover { border-color: var(--danger); color: var(--danger); background: var(--danger-l); }
-.hist-empty {
-  text-align: center; padding: 56px 20px; border: 1.5px dashed var(--border2);
-  border-radius: var(--r2);
-}
-.hist-empty-icon { font-size: 28px; margin-bottom: 12px; }
-.hist-empty-txt  { font-size: 14px; font-weight: 300; color: var(--ink3); line-height: 1.7; }
-
-/* Account page */
-.acct-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 11px; margin-bottom: 24px; }
-@media(max-width:480px) { .acct-grid { grid-template-columns: 1fr; } }
-.acct-cell { background: var(--surface); border: 1.5px solid var(--border); border-radius: var(--r2); padding: 16px 18px; }
-.acct-val  { font-family: var(--serif); font-size: 22px; font-weight: 500; color: var(--gold-d); margin-bottom: 3px; }
-.acct-lbl  { font-size: 12px; font-weight: 300; color: var(--ink3); }
-.acct-info { background: var(--surface); border: 1.5px solid var(--border); border-radius: var(--r2); overflow: hidden; margin-bottom: 24px; }
-.acct-row  { display: flex; justify-content: space-between; align-items: baseline; padding: 12px 17px; border-bottom: 1px solid var(--border); font-size: 13.5px; }
-.acct-row:last-child { border-bottom: none; }
-.acct-k { font-weight: 300; color: var(--ink3); }
-.acct-v { font-weight: 500; color: var(--ink); }
-.danger-btn {
-  padding: 10px 18px; background: none; border: 1.5px solid var(--border2);
-  border-radius: var(--r); font-size: 13px; font-weight: 400; color: var(--ink2);
-  font-family: var(--sans); cursor: pointer; transition: all var(--t);
-}
-.danger-btn:hover { border-color: var(--danger); color: var(--danger); background: var(--danger-l); }
-
-/* Toast */
-.toast {
-  position: fixed; bottom: 76px; left: 50%; transform: translateX(-50%);
-  padding: 9px 20px; border-radius: 25px; font-size: 13px; font-weight: 400;
-  pointer-events: none; z-index: 999; white-space: nowrap;
-  animation: toastIn 0.22s ease both;
-}
-.toast-ok  { background: var(--success); color: white; }
-.toast-err { background: var(--danger); color: white; }
-.toast-def { background: var(--btn-bg); color: var(--btn-text); }
-@keyframes toastIn { from { opacity:0; transform:translateX(-50%) translateY(8px); } to { opacity:1; transform:translateX(-50%) translateY(0); } }
-
-/* Spinner */
-.spin { width:30px;height:30px;border:2px solid var(--border);border-top-color:var(--gold);border-radius:50%;animation:spin360 .75s linear infinite; }
-@keyframes spin360 { to { transform:rotate(360deg); } }
-.loading-screen { min-height:80vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px; }
-.loading-txt { font-size:13px;font-weight:300;color:var(--ink3); }
+.mf-btn:hover { background: var(--btn-hover); transform: translateY(-1px); }
+.mf-btn-arrow { font-size: 14px; }
 `;
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SHARED UI PRIMITIVES
+// MAKER FOOTER
 // ─────────────────────────────────────────────────────────────────────────────
 
-function Back({ onClick, label = "Back" }: any) {
+function MakerFooter() {
   return (
-    <button className="back-btn" onClick={onClick}>← {label}</button>
+    <div className="maker-footer">
+      <div className="mf-eyebrow">Made by</div>
+      <div className="mf-name">Rashi</div>
+      <div className="mf-role">Designer</div>
+      <p className="mf-quote">
+        "I love designing products, and breaking them<br />
+        to figure out exactly how to make them better."
+      </p>
+      <a
+        className="mf-btn"
+        href="https://your-portfolio-link.com"
+        target="_blank"
+        rel="noopener noreferrer"
+      >
+        View Portfolio <span className="mf-btn-arrow">↗</span>
+      </a>
+    </div>
   );
 }
 
-function PrimaryBtn({ children, onClick, disabled }: any) {
-  return <button className="btn btn-primary" onClick={onClick} disabled={disabled}>{children}</button>;
+// ─────────────────────────────────────────────────────────────────────────────
+// PRIMITIVE COMPONENTS (unchanged)
+// ─────────────────────────────────────────────────────────────────────────────
+
+function PrimaryBtn({ onClick, disabled = false, children }: any) {
+  return <button className="btn-primary" onClick={onClick} disabled={disabled}>{children}</button>;
 }
-function GoldBtn({ children, onClick, disabled }: any) {
-  return <button className="btn btn-gold" onClick={onClick} disabled={disabled}>{children}</button>;
+function GoldBtn({ onClick, disabled = false, children }: any) {
+  return <button className="btn-gold" onClick={onClick} disabled={disabled}>{children}</button>;
 }
-function OutlineBtn({ children, onClick }: any) {
-  return <button className="btn btn-outline" onClick={onClick}>{children}</button>;
+function Back({ onClick }: any) {
+  return <button className="back-btn" onClick={onClick}>← Back</button>;
 }
 
 function RadioCards({ options, selected, onSelect, layout = "list" }: any) {
@@ -1418,8 +1410,8 @@ function RadioCards({ options, selected, onSelect, layout = "list" }: any) {
           className={`opt-card${selected === o.id ? " selected" : ""}`}
           onClick={() => onSelect(o.id)}
         >
-          {o.icon && <span className="opt-card-icon">{o.icon}</span>}
           <span className="opt-card-content">
+            {o.icon && <span className="opt-card-icon">{o.icon}</span>}
             <span className="opt-card-label">{o.label}</span>
             {o.sub && <span className="opt-card-sub">{o.sub}</span>}
           </span>
@@ -1433,46 +1425,43 @@ function RadioCards({ options, selected, onSelect, layout = "list" }: any) {
   );
 }
 
-function DescriptionPreview({ description }: any) {
-  const [expanded, setExpanded] = useState(false);
-  if (!description) return null;
-  return (
-    <div className="desc-preview">
-      <div className="desc-preview-label">From your description</div>
-      <div className={`desc-preview-text ${expanded ? "expanded" : "clamped"}`}>
-        "{description}"
-      </div>
-      <button className="read-more-btn" onClick={() => setExpanded(e => !e)}>
-        {expanded ? "Show less ↑" : "Read more ↓"}
-      </button>
-    </div>
-  );
-}
-
 // ─────────────────────────────────────────────────────────────────────────────
 // SIDEBAR / MOBILE PANEL
 // ─────────────────────────────────────────────────────────────────────────────
 
 function LivePanel({ state }: any) {
-  const hasExp = !!state.experience;
-  const hasScope = state.mode === "quick" ? !!state.hours : state.primaryScreens > 0;
+  const role    = state.role || "product";
+  const hasExp  = !!state.experience;
+  const hasScope = state.mode === "quick"
+    ? !!state.hours
+    : (role === "video" ? state.primaryScreens > 0 : state.primaryScreens > 0);
   const est = hasExp && hasScope ? calcEstimate(state) : null;
 
-  const items = [];
-  if (state.projectType) {
-    const pt = PROJECT_TYPES.find(p => p.id === state.projectType);
-    items.push({ l: "Project", v: pt?.label });
+  const items: any[] = [];
+  if (state.role) {
+    const r = ROLES.find(x => x.id === state.role);
+    items.push({ l: "Role", v: r?.label });
+  }
+  if (state.projectLevel && state.role && state.role !== "product") {
+    const lv = PROJECT_LEVELS.find(l => l.id === state.projectLevel);
+    if (lv) items.push({ l: "Project level", v: lv.label });
   }
   if (state.mode !== "quick") {
-    if (state.primaryScreens > 0) items.push({ l: "Primary screens", v: state.primaryScreens });
-    if (state.secondaryScreens > 0) items.push({ l: "Secondary screens", v: state.secondaryScreens });
+    const pl = getPrimaryLabel(role);
+    const sl = getSecondaryLabel(role);
+    if (state.primaryScreens > 0)  items.push({ l: pl.label,  v: `${state.primaryScreens} ${pl.unit}`  });
+    if (state.secondaryScreens > 0) items.push({ l: sl.label, v: `${state.secondaryScreens} ${sl.unit}` });
   }
   if (state.experience) {
     const exp = EXPERIENCE_LEVELS.find(e => e.id === state.experience);
-    items.push({ l: "Rate range", v: exp.rangeLabel });
+    if (state.customRate && Number(state.customRate) > 0) {
+      items.push({ l: "Your rate", v: `₹${Number(state.customRate).toLocaleString("en-IN")}/hr` });
+    } else {
+      items.push({ l: "Rate range", v: exp?.rangeLabel });
+    }
     if (est) items.push({ l: "Effective rate", v: inr(est.effRateMid) + "/hr" });
   }
-  if (state.uxActivities.length > 0) items.push({ l: "UX activities", v: state.uxActivities.length + " selected" });
+  if (state.uxActivities.length > 0) items.push({ l: "Add-ons", v: state.uxActivities.length + " selected" });
   if (state.revisions) items.push({ l: "Revisions", v: state.revisions + " cycles" });
   if (state.includeGST) items.push({ l: "GST", v: "18% included" });
 
@@ -1506,30 +1495,78 @@ function LivePanel({ state }: any) {
   );
 }
 
-function MobileBar({ state, onTap }: any) {
-  const hasExp = !!state.experience;
+function buildMobileContext(state): string {
+  const parts: string[] = [];
+  if (state.role) {
+    const r = ROLES.find(x => x.id === state.role);
+    if (r) parts.push(r.label.replace(" Designer","").replace(" Editor",""));
+  }
+  if (state.projectLevel && state.role && state.role !== "product") {
+    const lv = PROJECT_LEVELS.find(l => l.id === state.projectLevel);
+    if (lv) parts.push(lv.label);
+  }
+  if (state.mode === "scope") {
+    const total = (state.primaryScreens || 0) + (state.secondaryScreens || 0);
+    if (total > 0) {
+      const role = state.role;
+      if (role === "video") parts.push(`${state.primaryScreens} min`);
+      else if (total === 1) parts.push("1 deliverable");
+      else parts.push(`${total} deliverables`);
+    }
+    if (state.flowComplexity) {
+      const opts = getComplexityOptions(state.role || "product");
+      const cx = opts.find(f => f.id === state.flowComplexity);
+      if (cx) parts.push(cx.label);
+    }
+  }
+  if (state.experience) {
+    const exp = EXPERIENCE_LEVELS.find(e => e.id === state.experience);
+    if (exp) parts.push(exp.label);
+  }
+  return parts.length ? parts.join(" · ") : "";
+}
+
+function MobileBar({ state, screen, flowStep, totalSteps, onTap }: any) {
+  const hasExp   = !!state.experience;
   const hasScope = state.mode === "quick" ? !!state.hours : state.primaryScreens > 0;
-  const est = hasExp && hasScope ? calcEstimate(state) : null;
-  const priceText = est ? inr(est.low) + " – " + inr(est.high) : "—";
+  const est      = hasExp && hasScope ? calcEstimate(state) : null;
+  const hasEst   = !!est;
+
+  const context  = buildMobileContext(state);
+  const stepsLeft = totalSteps - flowStep;
 
   return (
     <div className="mob-bar" onClick={onTap}>
       <div className="mob-bar-inner">
-        <div>
-          <div className="mob-bar-left-label">Live Estimate</div>
-          <div className="mob-bar-price">{priceText}</div>
+        <div className="mob-bar-left">
+          {hasEst ? (
+            <>
+              <div className="mob-bar-left-label">Live Estimate</div>
+              <div className="mob-bar-price">{inr(est.low)} – {inr(est.high)}</div>
+            </>
+          ) : (
+            <>
+              <div className="mob-bar-left-label">
+                {screen === "flow" ? `${stepsLeft} step${stepsLeft !== 1 ? "s" : ""} left` : "Your estimate"}
+              </div>
+              <div className="mob-bar-context">
+                {context || "Fill in details to see your estimate"}
+              </div>
+            </>
+          )}
         </div>
-        <div className="mob-bar-hint">Tap to expand ↑</div>
+        <div className="mob-bar-hint">
+          {hasEst ? "Tap to expand ↑" : "↑"}
+        </div>
       </div>
     </div>
   );
 }
 
 function BottomSheet({ state, onClose }: any) {
-  const hasExp = !!state.experience;
+  const hasExp  = !!state.experience;
   const hasScope = state.mode === "quick" ? !!state.hours : state.primaryScreens > 0;
   const est = hasExp && hasScope ? calcEstimate(state) : null;
-
   return (
     <div className="sheet-overlay" onClick={e => { if ((e.target as HTMLElement).classList.contains("sheet-overlay")) onClose(); }}>
       <div className="sheet">
@@ -1549,30 +1586,64 @@ function BottomSheet({ state, onClose }: any) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// ENTRY SCREEN
+// ENTRY SCREEN — Role selector → Mode selector
 // ─────────────────────────────────────────────────────────────────────────────
 
 function EntryScreen({ onSelect }: any) {
+  const [selectedRole, setSelectedRole] = useState<string | null>(null);
+  const modeRef = useRef<HTMLDivElement>(null);
+
+  function pickRole(id: string) {
+    setSelectedRole(id);
+    // Scroll to mode section after a brief paint delay
+    setTimeout(() => {
+      modeRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 80);
+  }
+
   return (
     <div className="screen">
       <div className="eyebrow">FairScope · Pricing Assistant</div>
-      <h1 className="screen-title">How would you like to<br /><em>estimate this project?</em></h1>
-      <p className="screen-sub">Choose the method that best reflects your current understanding of the scope.</p>
+      <h1 className="screen-title">What type of<br /><em>creative work</em> is this?</h1>
+      <p className="screen-sub">Choose your role to get a calculation engine built for your work type.</p>
 
-      <div className="entry-grid">
-        <button className="entry-card" onClick={() => onSelect("quick")}>
-          <span className="ec-arrow">→</span>
-          <div className="ec-num">01</div>
-          <div className="ec-title">Quick Estimate</div>
-          <div className="ec-desc">You already have a rough hour figure. Fast, direct, and takes about 2 minutes.</div>
-        </button>
-        <button className="entry-card" onClick={() => onSelect("scope")}>
-          <span className="ec-arrow">→</span>
-          <div className="ec-num">02</div>
-          <div className="ec-title">Scope Builder</div>
-          <div className="ec-desc">You know screens and deliverables. Build a detailed, defensible estimate from the ground up.</div>
-        </button>
+      <div className="role-grid">
+        {ROLES.map(r => (
+          <button
+            key={r.id}
+            className={`role-card${selectedRole === r.id ? " selected" : ""}`}
+            onClick={() => pickRole(r.id)}
+          >
+            <span className="role-icon">{r.icon}</span>
+            <span className="role-label">{r.label}</span>
+            <span className="role-sub">{r.sub}</span>
+          </button>
+        ))}
+      </div>
 
+      {/* Mode section scrolls into view after role pick */}
+      <div ref={modeRef} style={{ scrollMarginTop: "80px" }}>
+        {selectedRole && (
+          <>
+            <div style={{ height: "1px", background: "var(--border)", margin: "8px 0 28px" }} />
+            <h2 className="screen-title" style={{ fontSize: "clamp(20px,3vw,28px)" }}>How would you like to<br /><em>estimate this project?</em></h2>
+            <p className="screen-sub">Choose the method that fits how well you know the scope.</p>
+            <div className="entry-grid">
+              <button className="entry-card" onClick={() => onSelect("quick", selectedRole)}>
+                <span className="ec-arrow">→</span>
+                <div className="ec-num">01</div>
+                <div className="ec-title">Quick Estimate</div>
+                <div className="ec-desc">You already have a rough hour figure. Fast, direct, takes about 2 minutes.</div>
+              </button>
+              <button className="entry-card" onClick={() => onSelect("scope", selectedRole)}>
+                <span className="ec-arrow">→</span>
+                <div className="ec-num">02</div>
+                <div className="ec-title">Scope Builder</div>
+                <div className="ec-desc">Derive hours from your deliverables, complexity, and add-ons. Role-specific inputs.</div>
+              </button>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
@@ -1582,7 +1653,8 @@ function EntryScreen({ onSelect }: any) {
 // SHARED STEPS
 // ─────────────────────────────────────────────────────────────────────────────
 
-function StepProjectType({ state, onUpdate, onNext, onBack, stepLabel }: any) {
+function StepProjectType({ state, onUpdate, onNext, onBack }: any) {
+  // Only product design uses this step; other roles skip to screens/scope
   return (
     <div className="screen">
       <Back onClick={onBack} />
@@ -1599,7 +1671,7 @@ function StepProjectType({ state, onUpdate, onNext, onBack, stepLabel }: any) {
   );
 }
 
-function StepExperience({ state, onUpdate, onNext, onBack, stepLabel, isFinal }: any) {
+function StepExperience({ state, onUpdate, onNext, onBack, isFinal }: any) {
   const Btn = isFinal ? GoldBtn : PrimaryBtn;
   return (
     <div className="screen">
@@ -1619,7 +1691,74 @@ function StepExperience({ state, onUpdate, onNext, onBack, stepLabel, isFinal }:
   );
 }
 
-function StepRevisions({ state, onUpdate, onNext, onBack, stepLabel }: any) {
+// ── CUSTOM RATE STEP ──────────────────────────────────────────────────────────
+// Optional. If filled, overrides the market range with the freelancer's own rate.
+// If skipped, the market range from the Experience step applies as normal.
+
+function StepCustomRate({ state, onUpdate, onNext, onBack }: any) {
+  const expLevel = EXPERIENCE_LEVELS.find(e => e.id === state.experience);
+  const suggested = expLevel?.rangeLabel || "market range";
+  const cr = state.customRate ? Number(state.customRate) : null;
+
+  // Live preview: what the estimate will look like at their custom rate
+  const previewRate = cr && cr > 0 ? cr : null;
+
+  return (
+    <div className="screen">
+      <Back onClick={onBack} />
+      <h2 className="screen-title">What do you<br /><em>charge per hour?</em></h2>
+      <p className="screen-sub">
+        Optional. Enter your actual rate and the estimate will use it directly.
+        Skip to use the suggested {suggested} based on your experience level.
+      </p>
+
+      <div className="num-field">
+        <div className="num-label">Your hourly rate</div>
+        <div className="num-wrap">
+          <input
+            className="num-in"
+            type="number"
+            min="100"
+            max="100000"
+            placeholder="e.g. 1500"
+            value={state.customRate || ""}
+            onChange={e => onUpdate({ customRate: e.target.value || null })}
+            autoFocus
+          />
+          <span className="num-unit">₹ / hr</span>
+        </div>
+      </div>
+
+      {previewRate && (
+        <div className="custom-rate-preview">
+          <div className="crp-label">Using your rate</div>
+          <div className="crp-val">₹{previewRate.toLocaleString("en-IN")}/hr</div>
+          <div className="crp-note">
+            The final price range will be calculated entirely from this number.
+            The market range is shown as reference only.
+          </div>
+          {expLevel && (
+            <div className="crp-compare">
+              Market range for your level: <strong>{expLevel.rangeLabel}</strong>
+            </div>
+          )}
+        </div>
+      )}
+
+      {!previewRate && expLevel && (
+        <div className="info-note" style={{ marginTop: 4 }}>
+          If you skip this, the estimate uses {suggested} as the rate range.
+        </div>
+      )}
+
+      <PrimaryBtn onClick={onNext}>
+        {previewRate ? "Use this rate →" : "Skip — use suggested range →"}
+      </PrimaryBtn>
+    </div>
+  );
+}
+
+function StepRevisions({ state, onUpdate, onNext, onBack }: any) {
   return (
     <div className="screen">
       <Back onClick={onBack} />
@@ -1636,289 +1775,12 @@ function StepRevisions({ state, onUpdate, onNext, onBack, stepLabel }: any) {
   );
 }
 
-function StepPlatform({ state, onUpdate, onNext, onBack, stepLabel }: any) {
-  return (
-    <div className="screen">
-      <Back onClick={onBack} />
-      <h2 className="screen-title">Which <em>platforms</em><br />are in scope?</h2>
-      <p className="screen-sub">Designing for multiple platforms multiplies screen effort by 1.3×.</p>
-      <RadioCards
-        options={PLATFORM_OPTIONS}
-        selected={state.platform}
-        onSelect={v => onUpdate({ platform: v })}
-        layout="2"
-      />
-      <PrimaryBtn onClick={onNext} disabled={!state.platform}>Continue →</PrimaryBtn>
-    </div>
-  );
-}
-
-function StepFlowComplexity({ state, onUpdate, onNext, onBack, stepLabel }: any) {
-  return (
-    <div className="screen">
-      <Back onClick={onBack} />
-      <h2 className="screen-title">How complex are the<br /><em>user flows?</em></h2>
-      <p className="screen-sub">Flow complexity multiplies screen effort to account for design decisions at each branch point.</p>
-      <RadioCards
-        options={FLOW_COMPLEXITY}
-        selected={state.flowComplexity}
-        onSelect={v => onUpdate({ flowComplexity: v })}
-        layout="list"
-      />
-      <PrimaryBtn onClick={onNext} disabled={!state.flowComplexity}>Continue →</PrimaryBtn>
-    </div>
-  );
-}
-
-function StepDesignSystem({ state, onUpdate, onNext, onBack, stepLabel }: any) {
-  return (
-    <div className="screen">
-      <Back onClick={onBack} />
-      <h2 className="screen-title">Is a <em>design system</em><br />in scope?</h2>
-      <p className="screen-sub">Design systems add fixed hours for token setup, documentation, and component coverage.</p>
-      <RadioCards
-        options={DESIGN_SYSTEM}
-        selected={state.designSystem}
-        onSelect={v => onUpdate({ designSystem: v })}
-        layout="list"
-      />
-      <PrimaryBtn onClick={onNext} disabled={!state.designSystem}>Continue →</PrimaryBtn>
-    </div>
-  );
-}
-
-function StepUXActivities({ state, onUpdate, onNext, onBack, stepLabel }: any) {
-  const selected = state.uxActivities;
-  const toggle = id => {
-    const next = selected.includes(id) ? selected.filter(x => x !== id) : [...selected, id];
-    onUpdate({ uxActivities: next });
-  };
-  const totalHrs = selected.reduce((sum, id) => sum + (ALL_UX_ITEMS.find(u => u.id === id)?.hrs || 0), 0);
-
-  return (
-    <div className="screen">
-      <Back onClick={onBack} />
-      <h2 className="screen-title">Which <em>UX activities</em><br />are included?</h2>
-      <p className="screen-sub">
-        Select all activities in scope.{" "}
-        {selected.length > 0 && (
-          <span style={{ color: "var(--gold)", fontWeight: 500 }}>
-            {selected.length} selected · +{totalHrs} hrs
-          </span>
-        )}
-      </p>
-
-      {UX_GROUPS.map(group => (
-        <div className="check-section" key={group.id}>
-          <div className="check-section-label">{group.label}</div>
-          <div className="check-list">
-            {group.items.map(item => (
-              <button
-                key={item.id}
-                className={`check-card${selected.includes(item.id) ? " checked" : ""}`}
-                onClick={() => toggle(item.id)}
-              >
-                <div className="check-box"><div className="check-mark" /></div>
-                <div>
-                  <div className="check-card-label">{item.label}</div>
-                  <div className="check-card-sub">{item.sub}</div>
-                </div>
-              </button>
-            ))}
-          </div>
-        </div>
-      ))}
-
-      <PrimaryBtn onClick={onNext}>Continue →</PrimaryBtn>
-      <button className="skip-link" onClick={onNext}>Skip — no UX research included</button>
-    </div>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// QUICK FLOW
-// ─────────────────────────────────────────────────────────────────────────────
-
-function StepHours({ state, onUpdate, onNext, onBack, stepLabel }: any) {
-  const hrs = Number(state.hours) || 0;
-  const warn = hrs > 0 && hrs < 10
-    ? "Very low estimate. Consider if research, revisions, and handoff are accounted for."
-    : hrs > 200
-    ? "Large scope. Confirm this is a single engagement and not multiple projects."
-    : null;
-
-  return (
-    <div className="screen">
-      <Back onClick={onBack} />
-      <h2 className="screen-title">How many hours do you<br /><em>estimate</em> for this project?</h2>
-      <p className="screen-sub">Include all design work — research, wireframing, UI, revisions, and handoff.</p>
-
-      <div className="num-field">
-        <div className="num-label">Total estimated hours</div>
-        <div className="num-wrap">
-          <input
-            className="num-in"
-            type="number"
-            min="1"
-            max="5000"
-            placeholder="60"
-            value={state.hours || ""}
-            onChange={e => onUpdate({ hours: e.target.value })}
-            autoFocus
-          />
-          <span className="num-unit">hrs</span>
-        </div>
-      </div>
-
-      {warn && <div className="warn-box">{warn}</div>}
-      <div className="info-note">Buffer (15%) and revision adjustments will be added automatically.</div>
-      <PrimaryBtn onClick={onNext} disabled={!state.hours || hrs <= 0}>Continue →</PrimaryBtn>
-    </div>
-  );
-}
-
-function ReviewQuick({ state, onNext, onBack, jumpTo }: any) {
-  const proj = PROJECT_TYPES.find(p => p.id === state.projectType);
-  const exp  = EXPERIENCE_LEVELS.find(e => e.id === state.experience);
-
-  return (
-    <div className="screen">
-      <Back onClick={onBack} />
-      <h2 className="screen-title">Review your<br /><em>estimate details.</em></h2>
-      <p className="screen-sub">Confirm before generating your pricing breakdown.</p>
-      <div className="rev-box">
-        {[
-          { k: "Project type",    v: proj?.label,                                         step: 1 },
-          { k: "Estimated hours", v: `${state.hours} hrs`,                                step: 2 },
-          { k: "Revision cycles", v: `${state.revisions} cycle${state.revisions>1?"s":""}`, step: 3 },
-          { k: "Experience",      v: `${exp?.label} · ${inr(exp?.rate)}/hr`,              step: 4 },
-        ].map(r => (
-          <div className="rev-row" key={r.k}>
-            <span className="rev-k">{r.k}</span>
-            <span>
-              <span className="rev-v">{r.v}</span>
-              <span className="rev-ed" onClick={() => jumpTo(r.step)}>Edit</span>
-            </span>
-          </div>
-        ))}
-      </div>
-      <GoldBtn onClick={onNext}>Generate Estimate →</GoldBtn>
-    </div>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// SCOPE FLOW
-// ─────────────────────────────────────────────────────────────────────────────
-
-function StepScreens({ state, onUpdate, onNext, onBack, stepLabel }: any) {
-  const total = state.primaryScreens + state.secondaryScreens;
-  const warn  = total > 50
-    ? "Very large screen count. Ensure this is a single engagement scope."
-    : null;
-
-  return (
-    <div className="screen">
-      <Back onClick={onBack} />
-      <h2 className="screen-title">How many <em>screens</em><br />does this project have?</h2>
-      <p className="screen-sub">
-        Primary screens = distinct full-page views (4 hrs each).<br />
-        Secondary = modals, overlays, empty states (1.5 hrs each).
-      </p>
-
-      <div className="screens-pair">
-        <div className="num-field">
-          <div className="num-label">Primary screens</div>
-          <div className="num-wrap">
-            <input
-              className="num-in"
-              type="number"
-              min="0"
-              max="999"
-              placeholder="8"
-              value={state.primaryScreens || ""}
-              onChange={e => onUpdate({ primaryScreens: Math.max(0, parseInt(e.target.value) || 0) })}
-              autoFocus
-            />
-            <span className="num-unit">screens</span>
-          </div>
-        </div>
-        <div className="num-field">
-          <div className="num-label">Secondary screens <span style={{ color: "var(--ink3)", fontWeight: 300 }}>(optional)</span></div>
-          <div className="num-wrap">
-            <input
-              className="num-in"
-              type="number"
-              min="0"
-              max="999"
-              placeholder="0"
-              value={state.secondaryScreens || ""}
-              onChange={e => onUpdate({ secondaryScreens: Math.max(0, parseInt(e.target.value) || 0) })}
-            />
-            <span className="num-unit">screens</span>
-          </div>
-        </div>
-      </div>
-
-      {warn && <div className="warn-box">{warn}</div>}
-      <PrimaryBtn onClick={onNext} disabled={state.primaryScreens < 1}>Continue →</PrimaryBtn>
-    </div>
-  );
-}
-
-function ReviewScope({ state, onNext, onBack, jumpTo }: any) {
-  const proj    = PROJECT_TYPES.find(p => p.id === state.projectType);
-  const exp     = EXPERIENCE_LEVELS.find(e => e.id === state.experience);
-  const pl      = PLATFORM_OPTIONS.find(p => p.id === state.platform);
-  const fc      = FLOW_COMPLEXITY.find(f => f.id === state.flowComplexity);
-  const ds      = DESIGN_SYSTEM.find(d => d.id === state.designSystem);
-  const uxNames = state.uxActivities.map(id => ALL_UX_ITEMS.find(u => u.id === id)?.label).filter(Boolean).join(", ") || "None";
-  const screenStr = `${state.primaryScreens} primary${state.secondaryScreens > 0 ? " + " + state.secondaryScreens + " secondary" : ""}`;
-
-  return (
-    <div className="screen">
-      <Back onClick={onBack} />
-      <h2 className="screen-title">Review your<br /><em>scope details.</em></h2>
-      <p className="screen-sub">Confirm before generating your estimate.</p>
-
-      <div className="rev-box">
-        {[
-          { k: "Project type",     v: proj?.label,                                         step: 1 },
-          { k: "Screen count",     v: screenStr,                                           step: 2 },
-          { k: "Platform",         v: pl?.label,                                           step: 3 },
-          { k: "Flow complexity",  v: `${fc?.label} (${fc?.tag})`,                        step: 4 },
-          { k: "Design system",    v: ds?.label,                                           step: 5 },
-          { k: "UX activities",    v: uxNames,                                             step: 6 },
-          { k: "Revision cycles",  v: `${state.revisions} cycle${state.revisions>1?"s":""}`, step: 7 },
-          { k: "Experience",       v: `${exp?.label} · ${inr(exp?.rate)}/hr`,             step: 8 },
-        ].map(r => (
-          <div className="rev-row" key={r.k}>
-            <span className="rev-k">{r.k}</span>
-            <span>
-              <span className="rev-v">{r.v}</span>
-              <span className="rev-ed" onClick={() => jumpTo(r.step)}>Edit</span>
-            </span>
-          </div>
-        ))}
-      </div>
-      <GoldBtn onClick={onNext}>Generate Estimate →</GoldBtn>
-    </div>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// AI FLOW
-// ─────────────────────────────────────────────────────────────────────────────
-
 function StepPMOverhead({ state, onUpdate, onNext, onBack }: any) {
   return (
     <div className="screen">
       <Back onClick={onBack} />
       <h2 className="screen-title">Project management<br /><em>overhead?</em></h2>
-      <p className="screen-sub">
-        How much coordination, meetings, and client management does this project involve?
-        Applied as a percentage of total design hours.
-      </p>
+      <p className="screen-sub">How much coordination, meetings, and client management does this project involve?</p>
       <RadioCards
         options={PM_OVERHEAD}
         selected={state.pmOverhead}
@@ -1934,59 +1796,64 @@ function StepSustainability({ state, onUpdate, onNext, onBack }: any) {
   const util    = state.utilizationRate ?? UTILIZATION_DEFAULT;
   const mult    = state.freelanceMult   ?? FREELANCE_MULT_DEFAULT;
   const expLevel = EXPERIENCE_LEVELS.find(e => e.id === state.experience);
-  const effRate  = expLevel ? Math.round(expLevel.rate / util) : null;
+  const baseRate = expLevel?.rate || 2750;
+  const effRate  = Math.round(baseRate / util);
 
   return (
     <div className="screen">
       <Back onClick={onBack} />
-      <h2 className="screen-title">Sustainability<br /><em>settings.</em></h2>
+      <h2 className="screen-title">Two adjustments that<br /><em>protect your income.</em></h2>
       <p className="screen-sub">
-        These defaults reflect Indian freelance market realities. Adjust only if your situation differs.
+        These reflect costs that salaried employees never see — but freelancers carry every month. The defaults are calibrated for the Indian market. Adjust only if your situation is different.
       </p>
 
+      {/* ── Utilization ── */}
       <div className="sus-block">
         <div className="sus-row-hd">
-          <div className="sus-lbl">Utilization rate</div>
+          <div className="sus-lbl">Billable utilization</div>
           <div className="sus-val">{Math.round(util * 100)}%</div>
         </div>
-        <input
-          type="range" min="30" max="100" step="5"
-          value={Math.round(util * 100)}
+        <input type="range" min="30" max="100" step="5" value={Math.round(util * 100)}
           onChange={e => onUpdate({ utilizationRate: Number(e.target.value) / 100 })}
-          className="sus-slider"
-        />
-        <div className="sus-range-labels"><span>30% — heavy admin</span><span>100% — fully billable</span></div>
+          className="sus-slider" />
+        <div className="sus-range-labels"><span>30% — admin-heavy</span><span>100% — fully booked</span></div>
+        <div className="sus-context-box">
+          <div className="sus-ctx-q">What is this?</div>
+          <div className="sus-ctx-a">
+            Not every working hour is a billable hour. Time spent on proposals, follow-ups, invoicing, and finding new clients doesn't get charged to anyone. At 75%, you're billing for 6 out of every 8 hours you work.
+          </div>
+        </div>
         {effRate && (
           <div className="sus-preview">
-            {expLevel.rangeLabel} midpoint ÷ {Math.round(util * 100)}% utilization
-            = <strong>{inr(effRate)}/hr effective rate</strong>
+            ₹{baseRate.toLocaleString('en-IN')}/hr market rate ÷ {Math.round(util * 100)}% utilization
+            = <strong>₹{effRate.toLocaleString('en-IN')}/hr effective rate</strong>
           </div>
         )}
-        <p className="sus-note">Covers non-billable time: admin, marketing, client communication, and business development.</p>
       </div>
 
+      {/* ── Freelance premium ── */}
       <div className="sus-block">
         <div className="sus-row-hd">
-          <div className="sus-lbl">Freelance sustainability multiplier</div>
+          <div className="sus-lbl">Business overhead multiplier</div>
           <div className="sus-val">{mult.toFixed(2)}×</div>
         </div>
-        <input
-          type="range" min="100" max="175" step="5"
-          value={Math.round(mult * 100)}
+        <input type="range" min="100" max="175" step="5" value={Math.round(mult * 100)}
           onChange={e => onUpdate({ freelanceMult: Number(e.target.value) / 100 })}
-          className="sus-slider"
-        />
+          className="sus-slider" />
         <div className="sus-range-labels"><span>1.00× — no premium</span><span>1.75× — high overhead</span></div>
-        <p className="sus-note">Covers what salaried designers don't pay: software, hardware, health insurance, and business risk.</p>
+        <div className="sus-context-box">
+          <div className="sus-ctx-q">What is this?</div>
+          <div className="sus-ctx-a">
+            A salaried designer pays nothing for their laptop, software, insurance, or workspace — the employer does. As a freelancer, those costs come out of your earnings. This multiplier adds a small premium to cover those real expenses. At 1.05×, you're adding about 5% — roughly ₹500–₹2,000/month depending on your setup.
+          </div>
+        </div>
       </div>
 
-      <div
-        className={"gst-row" + (state.includeGST ? " gst-on" : "")}
-        onClick={() => onUpdate({ includeGST: !state.includeGST })}
-      >
+      {/* ── GST ── */}
+      <div className={"gst-row" + (state.includeGST ? " gst-on" : "")} onClick={() => onUpdate({ includeGST: !state.includeGST })}>
         <div>
-          <div className="gst-label">Add GST (18%)</div>
-          <div className="gst-sub">Enable if you are GST-registered. Shown separately in results.</div>
+          <div className="gst-label">Include GST (18%)</div>
+          <div className="gst-sub">Enable only if you are registered under GST. Shown as a separate line in results.</div>
         </div>
         <div className="tog-track">
           <div className={"tog-thumb" + (state.includeGST ? " tog-on" : "")} />
@@ -1998,15 +1865,369 @@ function StepSustainability({ state, onUpdate, onNext, onBack }: any) {
   );
 }
 
+function StepHours({ state, onUpdate, onNext, onBack }: any) {
+  const hrs = Number(state.hours) || 0;
+  const warn = hrs > 0 && hrs < 10
+    ? "Very low estimate. Consider if revisions and handoff are accounted for."
+    : hrs > 200
+    ? "Large scope. Confirm this is a single engagement."
+    : null;
+
+  return (
+    <div className="screen">
+      <Back onClick={onBack} />
+      <h2 className="screen-title">How many hours do you<br /><em>estimate</em> for this project?</h2>
+      <p className="screen-sub">Include all work — creation, revisions, and handoff.</p>
+      <div className="num-field">
+        <div className="num-label">Total estimated hours</div>
+        <div className="num-wrap">
+          <input className="num-in" type="number" min="1" max="5000" placeholder="60" value={state.hours || ""} onChange={e => onUpdate({ hours: e.target.value })} autoFocus />
+          <span className="num-unit">hrs</span>
+        </div>
+      </div>
+      {warn && <div className="warn-box">{warn}</div>}
+      <div className="info-note">Buffer (15%) and revision adjustments will be added automatically.</div>
+      <PrimaryBtn onClick={onNext} disabled={!state.hours || hrs <= 0}>Continue →</PrimaryBtn>
+    </div>
+  );
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
-// RESULTS
+// PRODUCT DESIGN STEPS (UNCHANGED)
 // ─────────────────────────────────────────────────────────────────────────────
 
-function ResultsScreen({ state, onRestart }: any) {
+function StepScreens({ state, onUpdate, onNext, onBack }: any) {
+  const total = state.primaryScreens + state.secondaryScreens;
+  const warn  = total > 50 ? "Very large screen count. Ensure this is a single engagement scope." : null;
+  return (
+    <div className="screen">
+      <Back onClick={onBack} />
+      <h2 className="screen-title">How many <em>screens</em><br />does this project have?</h2>
+      <p className="screen-sub">Primary screens = distinct full-page views (4 hrs each).<br />Secondary = modals, overlays, empty states (1.5 hrs each).</p>
+      <div className="screens-pair">
+        <div className="num-field">
+          <div className="num-label">Primary screens</div>
+          <div className="num-wrap">
+            <input className="num-in" type="number" min="0" max="999" placeholder="8" value={state.primaryScreens || ""} onChange={e => onUpdate({ primaryScreens: Math.max(0, parseInt(e.target.value) || 0) })} autoFocus />
+            <span className="num-unit">screens</span>
+          </div>
+        </div>
+        <div className="num-field">
+          <div className="num-label">Secondary screens <span style={{ color: "var(--ink3)", fontWeight: 300 }}>(optional)</span></div>
+          <div className="num-wrap">
+            <input className="num-in" type="number" min="0" max="999" placeholder="0" value={state.secondaryScreens || ""} onChange={e => onUpdate({ secondaryScreens: Math.max(0, parseInt(e.target.value) || 0) })} />
+            <span className="num-unit">screens</span>
+          </div>
+        </div>
+      </div>
+      {warn && <div className="warn-box">{warn}</div>}
+      <PrimaryBtn onClick={onNext} disabled={state.primaryScreens < 1}>Continue →</PrimaryBtn>
+    </div>
+  );
+}
+
+function StepPlatform({ state, onUpdate, onNext, onBack }: any) {
+  return (
+    <div className="screen">
+      <Back onClick={onBack} />
+      <h2 className="screen-title">Which <em>platforms</em><br />are in scope?</h2>
+      <p className="screen-sub">Designing for multiple platforms multiplies screen effort by 1.3×.</p>
+      <RadioCards options={PLATFORM_OPTIONS} selected={state.platform} onSelect={v => onUpdate({ platform: v })} layout="2" />
+      <PrimaryBtn onClick={onNext} disabled={!state.platform}>Continue →</PrimaryBtn>
+    </div>
+  );
+}
+
+function StepFlowComplexity({ state, onUpdate, onNext, onBack }: any) {
+  return (
+    <div className="screen">
+      <Back onClick={onBack} />
+      <h2 className="screen-title">How complex are the<br /><em>user flows?</em></h2>
+      <p className="screen-sub">Flow complexity multiplies screen effort to account for design decisions at each branch point.</p>
+      <RadioCards options={FLOW_COMPLEXITY} selected={state.flowComplexity} onSelect={v => onUpdate({ flowComplexity: v })} layout="list" />
+      <PrimaryBtn onClick={onNext} disabled={!state.flowComplexity}>Continue →</PrimaryBtn>
+    </div>
+  );
+}
+
+function StepDesignSystem({ state, onUpdate, onNext, onBack }: any) {
+  return (
+    <div className="screen">
+      <Back onClick={onBack} />
+      <h2 className="screen-title">Is a <em>design system</em><br />in scope?</h2>
+      <p className="screen-sub">Design systems add fixed hours for token setup, documentation, and component coverage.</p>
+      <RadioCards options={DESIGN_SYSTEM} selected={state.designSystem} onSelect={v => onUpdate({ designSystem: v })} layout="list" />
+      <PrimaryBtn onClick={onNext} disabled={!state.designSystem}>Continue →</PrimaryBtn>
+    </div>
+  );
+}
+
+function StepUXActivities({ state, onUpdate, onNext, onBack }: any) {
+  const selected = state.uxActivities;
+  const toggle = id => {
+    const next = selected.includes(id) ? selected.filter(x => x !== id) : [...selected, id];
+    onUpdate({ uxActivities: next });
+  };
+  const totalHrs = selected.reduce((sum, id) => sum + (ALL_UX_ITEMS.find(u => u.id === id)?.hrs || 0), 0);
+  return (
+    <div className="screen">
+      <Back onClick={onBack} />
+      <h2 className="screen-title">Which <em>UX activities</em><br />are included?</h2>
+      <p className="screen-sub">Select all activities in scope.{" "}{selected.length > 0 && <span style={{ color: "var(--gold)", fontWeight: 500 }}>{selected.length} selected · +{totalHrs} hrs</span>}</p>
+      {UX_GROUPS.map(group => (
+        <div className="check-section" key={group.id}>
+          <div className="check-section-label">{group.label}</div>
+          <div className="check-list">
+            {group.items.map(item => (
+              <button key={item.id} className={`check-card${selected.includes(item.id) ? " checked" : ""}`} onClick={() => toggle(item.id)}>
+                <div className="check-box"><div className="check-mark" /></div>
+                <div>
+                  <div className="check-card-label">{item.label}</div>
+                  <div className="check-card-sub">{item.sub}</div>
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+      ))}
+      <PrimaryBtn onClick={onNext}>Continue →</PrimaryBtn>
+      <button className="skip-link" onClick={onNext}>Skip — no UX research included</button>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PROJECT LEVEL STEP — inserted as step 1 in non-product scope builder
+// ─────────────────────────────────────────────────────────────────────────────
+
+function StepProjectLevel({ state, onUpdate, onNext, onBack }: any) {
+  return (
+    <div className="screen">
+      <Back onClick={onBack} />
+      <h2 className="screen-title">What's the <em>project level</em><br />for this engagement?</h2>
+      <p className="screen-sub">
+        This adjusts base hours, add-on weight, and buffer — keeping your estimate realistic for the type of client and output expected.
+      </p>
+      <div className="opt-grid">
+        {PROJECT_LEVELS.map(lv => (
+          <button
+            key={lv.id}
+            className={`opt-card${state.projectLevel === lv.id ? " selected" : ""}`}
+            onClick={() => onUpdate({ projectLevel: lv.id })}
+          >
+            <span className="opt-card-content">
+              <span className="opt-card-label">{lv.label}</span>
+              <span className="opt-card-sub">{lv.sub}</span>
+            </span>
+            <span className="opt-card-tag">{lv.tag}</span>
+          </button>
+        ))}
+      </div>
+      <PrimaryBtn onClick={onNext} disabled={!state.projectLevel}>Continue →</PrimaryBtn>
+    </div>
+  );
+}
+
+// Reusable "scope/deliverables" step for non-product roles
+function StepRoleScope({ state, onUpdate, onNext, onBack }: any) {
+  const role   = state.role;
+  const pl     = getPrimaryLabel(role);
+  const sl     = getSecondaryLabel(role);
+  const titles = getScopeStepTitle(role);
+  const total  = state.primaryScreens + state.secondaryScreens;
+
+  return (
+    <div className="screen">
+      <Back onClick={onBack} />
+      <h2 className="screen-title">{titles.titleEl}</h2>
+      <p className="screen-sub">{titles.sub}</p>
+      <div className="screens-pair">
+        <div className="num-field">
+          <div className="num-label">{pl.label}</div>
+          <div className="num-wrap">
+            <input
+              className="num-in"
+              type="number"
+              min="0"
+              max="999"
+              placeholder={pl.ph}
+              value={state.primaryScreens || ""}
+              onChange={e => onUpdate({ primaryScreens: Math.max(0, parseInt(e.target.value) || 0) })}
+              autoFocus
+            />
+            <span className="num-unit">{pl.unit}</span>
+          </div>
+          <div className="mapping-note">{pl.hint}</div>
+        </div>
+        <div className="num-field">
+          <div className="num-label">{sl.label} <span style={{ color: "var(--ink3)", fontWeight: 300 }}>(optional)</span></div>
+          <div className="num-wrap">
+            <input
+              className="num-in"
+              type="number"
+              min="0"
+              max="999"
+              placeholder={sl.ph}
+              value={state.secondaryScreens || ""}
+              onChange={e => onUpdate({ secondaryScreens: Math.max(0, parseInt(e.target.value) || 0) })}
+            />
+            <span className="num-unit">{sl.unit}</span>
+          </div>
+          <div className="mapping-note">{sl.hint}</div>
+        </div>
+      </div>
+      <PrimaryBtn onClick={onNext} disabled={state.primaryScreens < 1}>Continue →</PrimaryBtn>
+    </div>
+  );
+}
+
+// Reusable "platform" step for non-product roles
+function StepRolePlatform({ state, onUpdate, onNext, onBack }: any) {
+  const role   = state.role;
+  const opts   = getPlatformOptions(role);
+  const titles = getPlatformStepTitle(role);
+  return (
+    <div className="screen">
+      <Back onClick={onBack} />
+      <h2 className="screen-title">{titles.titleEl}</h2>
+      <p className="screen-sub">{titles.sub}</p>
+      <RadioCards options={opts} selected={state.platform} onSelect={v => onUpdate({ platform: v })} layout="2" />
+      <PrimaryBtn onClick={onNext} disabled={!state.platform}>Continue →</PrimaryBtn>
+    </div>
+  );
+}
+
+// Reusable "complexity" step for non-product roles
+function StepRoleComplexity({ state, onUpdate, onNext, onBack }: any) {
+  const role   = state.role;
+  const opts   = getComplexityOptions(role);
+  const titles = getComplexityStepTitle(role);
+  return (
+    <div className="screen">
+      <Back onClick={onBack} />
+      <h2 className="screen-title">{titles.titleEl}</h2>
+      <p className="screen-sub">{titles.sub}</p>
+      <RadioCards options={opts} selected={state.flowComplexity} onSelect={v => onUpdate({ flowComplexity: v })} layout="list" />
+      <PrimaryBtn onClick={onNext} disabled={!state.flowComplexity}>Continue →</PrimaryBtn>
+    </div>
+  );
+}
+
+// Reusable "add-ons" step for non-product roles (maps to uxActivities field)
+function StepRoleAddons({ state, onUpdate, onNext, onBack }: any) {
+  const role     = state.role;
+  const groups   = getAddonGroups(role);
+  const allItems = getAllAddons(role);
+  const titles   = getAddonStepTitle(role);
+  const selected = state.uxActivities;
+
+  const toggle = id => {
+    const next = selected.includes(id) ? selected.filter(x => x !== id) : [...selected, id];
+    onUpdate({ uxActivities: next });
+  };
+  const totalHrs = selected.reduce((sum, id) => sum + (allItems.find(u => u.id === id)?.hrs || 0), 0);
+
+  return (
+    <div className="screen">
+      <Back onClick={onBack} />
+      <h2 className="screen-title">{titles.titleEl}</h2>
+      <p className="screen-sub">
+        {titles.sub}{" "}
+        {selected.length > 0 && <span style={{ color: "var(--gold)", fontWeight: 500 }}>{selected.length} selected · +{totalHrs} hrs</span>}
+      </p>
+      {groups.map(group => (
+        <div className="check-section" key={group.id}>
+          <div className="check-section-label">{group.label}</div>
+          <div className="check-list">
+            {group.items.map(item => (
+              <button key={item.id} className={`check-card${selected.includes(item.id) ? " checked" : ""}`} onClick={() => toggle(item.id)}>
+                <div className="check-box"><div className="check-mark" /></div>
+                <div>
+                  <div className="check-card-label">{item.label}</div>
+                  <div className="check-card-sub">{item.sub}</div>
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+      ))}
+      <PrimaryBtn onClick={onNext}>Continue →</PrimaryBtn>
+      <button className="skip-link" onClick={onNext}>Skip — no add-ons</button>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// REVIEW STEP — non-product scope flow
+// ─────────────────────────────────────────────────────────────────────────────
+
+function StepRoleReview({ state, onNext, onBack, jumpTo }: any) {
+  const role   = state.role;
+  const lv     = PROJECT_LEVELS.find(l => l.id === state.projectLevel);
+  const pl     = getPrimaryLabel(role);
+  const sl     = getSecondaryLabel(role);
+  const exp    = EXPERIENCE_LEVELS.find(e => e.id === state.experience);
+  const cxOpts = getComplexityOptions(role);
+  const ptOpts = getPlatformOptions(role);
+  const cx     = cxOpts.find(f => f.id === state.flowComplexity);
+  const pt     = ptOpts.find(p => p.id === state.platform);
+  const pm     = PM_OVERHEAD.find(p => p.id === state.pmOverhead);
+  const allAdds = getAllAddons(role);
+  const addonNames = state.uxActivities
+    .map(id => allAdds.find(u => u.id === id)?.label)
+    .filter(Boolean).join(", ") || "None";
+
+  const scopeVal = role === "video"
+    ? `${state.primaryScreens} min output${state.secondaryScreens > 0 ? ` · ${state.secondaryScreens} hrs footage` : ""}`
+    : `${state.primaryScreens} ${pl.unit}${state.secondaryScreens > 0 ? ` + ${state.secondaryScreens} ${sl.unit}` : ""}`;
+
+  const cxTitle = getComplexityStepTitle(role).title.replace("?","").trim();
+  const ptTitle = getPlatformStepTitle(role).title.replace("?","").trim();
+
+  const rows = [
+    { k: "Project level",  v: `${lv?.label} — ${lv?.tag}`,                       step: 1 },
+    { k: pl.label,         v: scopeVal,                                            step: 2 },
+    { k: ptTitle,          v: pt?.label || "—",                                   step: 3 },
+    { k: cxTitle,          v: cx ? `${cx.label} (${cx.tag})` : "—",              step: 4 },
+    { k: "Add-ons",        v: addonNames,                                          step: 5 },
+    { k: "Revisions",      v: `${state.revisions} cycle${state.revisions > 1 ? "s" : ""}`, step: 6 },
+    { k: "Experience",     v: exp ? `${exp.label} · ${exp.rangeLabel}` : "—",    step: 7 },
+    { k: "Coordination",   v: pm?.label || "—",                                   step: 8 },
+  ];
+
+  return (
+    <div className="screen">
+      <Back onClick={onBack} />
+      <h2 className="screen-title">Review your<br /><em>scope details.</em></h2>
+      <p className="screen-sub">Confirm everything looks right before generating your estimate.</p>
+      <div className="rev-box">
+        {rows.map(r => (
+          <div className="rev-row" key={r.k}>
+            <span className="rev-k">{r.k}</span>
+            <span>
+              <span className="rev-v">{r.v}</span>
+              <span className="rev-ed" onClick={() => jumpTo(r.step)}>Edit</span>
+            </span>
+          </div>
+        ))}
+      </div>
+      <GoldBtn onClick={onNext}>Looks good — generate →</GoldBtn>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// RESULTS SCREEN
+// ─────────────────────────────────────────────────────────────────────────────
+
+function ResultsScreen({ state, onRestart, onEdit }: any) {
   const [copied, setCopied] = useState(false);
+  const [downloaded, setDownloaded] = useState(false);
   const est    = calcEstimate(state);
   const just   = buildJustification(state, est);
-  const pmLbl  = PM_OVERHEAD.find(p => p.id === (state.pmOverhead || "standard"))?.label || "Standard";
+  const pmLbl  = PM_OVERHEAD.find(p => p.id === (state.pmOverhead || "standard"))?.label || "Active management";
+  const role   = ROLES.find(r => r.id === (state.role || "product"));
+  const hrsDetail = est.hrsDetail;
 
   function copy() {
     navigator.clipboard.writeText(just);
@@ -2015,15 +2236,15 @@ function ResultsScreen({ state, onRestart }: any) {
   }
 
   function download() {
-    const pt = PROJECT_TYPES.find(p => p.id === state.projectType)?.label;
+    const roleLabel = role?.label || "Design";
     const bk = est.breakdown.map(r => `  ${r.label}: ${inr(r.amount)} (${r.note})`).join("\n");
     const lines = [
       "FAIRSCOPE — PROJECT ESTIMATE",
       "═".repeat(42),
       "",
-      `Project: ${pt}`,
+      `Role: ${roleLabel}`,
       `Mode: ${state.mode === "quick" ? "Quick Estimate" : "Scope Builder"}`,
-      `Design Hours: ${est.totalHrs} hrs`,
+      `Total Hours: ${est.totalHrs} hrs`,
       `Market Rate: ${est.expLevel?.rangeLabel || ""}  (midpoint ${inr(est.midRate)}/hr)`,
       `Utilization: ${Math.round(est.utilization * 100)}%  →  Effective rate: ${inr(est.effRateMid)}/hr`,
       `Freelance Multiplier: ${est.freeMult}×`,
@@ -2054,26 +2275,42 @@ function ResultsScreen({ state, onRestart }: any) {
     const a    = document.createElement("a");
     a.href     = URL.createObjectURL(blob);
     a.download = "fairscope-estimate.txt";
+    document.body.appendChild(a);
     a.click();
-    URL.revokeObjectURL(a.href);
+    document.body.removeChild(a);
+    // Release object URL after short delay — does NOT navigate away
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    setDownloaded(true);
+    setTimeout(() => setDownloaded(false), 3000);
   }
 
-  const hrsDetail = est.hrsDetail;
+  // Effort grid: role-aware labels
+  const r = state.role || "product";
+  const pl = getPrimaryLabel(r);
+  const sl = getSecondaryLabel(r);
 
   return (
     <div className="result-wrap">
-      {/* ── Range Hero ── */}
       <div className="range-hero">
-        <div className="rh-eyebrow">Suggested Professional Range</div>
+        <div className="rh-eyebrow">
+          Suggested Professional Range · {role?.label}
+          {state.projectLevel && state.role !== "product" && (
+            <> · {PROJECT_LEVELS.find(l => l.id === state.projectLevel)?.label}</>
+          )}
+        </div>
         <div className="rh-range">{inr(est.low)} – {inr(est.high)}</div>
-        <div className="rh-hrs">{est.totalHrs} design hrs · {est.expLevel?.rangeLabel}</div>
+        <div className="rh-hrs">
+          {est.totalHrs} hrs ·{" "}
+          {state.customRate && Number(state.customRate) > 0
+            ? `₹${Number(state.customRate).toLocaleString("en-IN")}–₹${Math.round(Number(state.customRate)*1.2).toLocaleString("en-IN")}/hr (your rate range)`
+            : est.expLevel?.rangeLabel}
+        </div>
         <div className="rh-note">
           Effective {inr(est.effRateMid)}/hr after {Math.round((1 - est.utilization) * 100)}% utilization adjustment
           {state.includeGST ? ` · GST ${inr(est.gstMid)} included` : ""}
         </div>
       </div>
 
-      {/* ── Scope Breakdown (hours → cost at effective rate) ── */}
       <div className="result-card">
         <div className="rc-title">Scope Breakdown</div>
         {est.breakdown.map((row, i) => (
@@ -2086,17 +2323,16 @@ function ResultsScreen({ state, onRestart }: any) {
           </div>
         ))}
         <div className="bk-subtotal-row">
-          <span className="bk-subtotal-l">Base design cost</span>
+          <span className="bk-subtotal-l">Base cost</span>
           <span className="bk-subtotal-a">{inr(est.designCostMid)}</span>
         </div>
       </div>
 
-      {/* ── Pricing Layers (sustainability stack) ── */}
       <div className="result-card">
         <div className="rc-title">Pricing Layers</div>
         <div className="bk-row">
           <span>
-            <div className="bk-l">Base design cost</div>
+            <div className="bk-l">Base cost</div>
             <div className="bk-note">{est.totalHrs} hrs × {inr(est.effRateMid)}/hr effective rate</div>
           </span>
           <span className="bk-a">{inr(est.designCostMid)}</span>
@@ -2105,7 +2341,7 @@ function ResultsScreen({ state, onRestart }: any) {
           <div className="bk-row">
             <span>
               <div className="bk-l">Project management — {pmLbl}</div>
-              <div className="bk-note">+{Math.round(est.pmPct * 100)}% of design cost</div>
+              <div className="bk-note">+{Math.round(est.pmPct * 100)}% of base cost</div>
             </span>
             <span className="bk-a">+{inr(est.pmCostMid)}</span>
           </div>
@@ -2132,25 +2368,67 @@ function ResultsScreen({ state, onRestart }: any) {
         </div>
       </div>
 
-      {/* ── Effort Grid (scope/AI only) ── */}
       {state.mode !== "quick" && hrsDetail && (
         <div className="result-card">
           <div className="rc-title">Effort Breakdown</div>
           <div className="hrs-grid">
-            <div className="hrs-cell">
-              <div className="hrs-n">{hrsDetail.primaryHrs}</div>
-              <div className="hrs-l">Primary screens ({state.primaryScreens})</div>
-            </div>
-            {state.secondaryScreens > 0 && (
+            {/* Product design */}
+            {hrsDetail.primaryHrs !== undefined && (
+              <div className="hrs-cell">
+                <div className="hrs-n">{hrsDetail.primaryHrs}</div>
+                <div className="hrs-l">Primary screens ({state.primaryScreens})</div>
+              </div>
+            )}
+            {hrsDetail.secondaryHrs !== undefined && state.secondaryScreens > 0 && (
               <div className="hrs-cell">
                 <div className="hrs-n">{hrsDetail.secondaryHrs}</div>
                 <div className="hrs-l">Secondary screens ({state.secondaryScreens})</div>
               </div>
             )}
-            {hrsDetail.uxHrs > 0 && (
+            {/* Graphic */}
+            {hrsDetail.complexBase !== undefined && (
               <div className="hrs-cell">
-                <div className="hrs-n">{hrsDetail.uxHrs}</div>
-                <div className="hrs-l">UX research ({state.uxActivities.length} activities)</div>
+                <div className="hrs-n">{hrsDetail.complexBase}</div>
+                <div className="hrs-l">Complex deliverables ({state.primaryScreens})</div>
+              </div>
+            )}
+            {hrsDetail.simpleBase !== undefined && hrsDetail.simpleBase > 0 && (
+              <div className="hrs-cell">
+                <div className="hrs-n">{hrsDetail.simpleBase}</div>
+                <div className="hrs-l">Simple deliverables ({state.secondaryScreens})</div>
+              </div>
+            )}
+            {/* Branding */}
+            {hrsDetail.coreBase !== undefined && (
+              <div className="hrs-cell">
+                <div className="hrs-n">{hrsDetail.coreBase}</div>
+                <div className="hrs-l">Core deliverables ({state.primaryScreens})</div>
+              </div>
+            )}
+            {hrsDetail.extendedBase !== undefined && hrsDetail.extendedBase > 0 && (
+              <div className="hrs-cell">
+                <div className="hrs-n">{hrsDetail.extendedBase}</div>
+                <div className="hrs-l">Extended assets ({state.secondaryScreens})</div>
+              </div>
+            )}
+            {/* Video */}
+            {hrsDetail.durationBase !== undefined && (
+              <div className="hrs-cell">
+                <div className="hrs-n">{hrsDetail.durationBase}</div>
+                <div className="hrs-l">Editing ({state.primaryScreens} min output)</div>
+              </div>
+            )}
+            {hrsDetail.footageAdj !== undefined && hrsDetail.footageAdj > 0 && (
+              <div className="hrs-cell">
+                <div className="hrs-n">{hrsDetail.footageAdj}</div>
+                <div className="hrs-l">Footage overhead</div>
+              </div>
+            )}
+            {/* Shared */}
+            {(hrsDetail.uxHrs > 0 || hrsDetail.addonHrs > 0) && (
+              <div className="hrs-cell">
+                <div className="hrs-n">{hrsDetail.uxHrs ?? hrsDetail.addonHrs}</div>
+                <div className="hrs-l">Add-ons ({state.uxActivities.length} items)</div>
               </div>
             )}
             {hrsDetail.dsHrs > 0 && (
@@ -2165,20 +2443,28 @@ function ResultsScreen({ state, onRestart }: any) {
             </div>
             <div className="hrs-cell" style={{ background: "var(--gold-l)" }}>
               <div className="hrs-n" style={{ color: "var(--gold-d)" }}>{est.totalHrs}</div>
-              <div className="hrs-l">Total design hours</div>
+              <div className="hrs-l">Total hours</div>
             </div>
           </div>
         </div>
       )}
 
-      {/* ── Rate Transparency ── */}
       <div className="result-card">
         <div className="rc-title">Rate Transparency</div>
         <div className="rate-grid">
-          <div className="rate-cell">
-            <div className="rate-val">{est.expLevel?.rangeLabel || "—"}</div>
-            <div className="rate-lbl">Market rate range</div>
-          </div>
+          {state.customRate && Number(state.customRate) > 0 ? (
+            <div className="rate-cell" style={{ background: "var(--gold-l)", border: "1px solid var(--gold-bd)" }}>
+              <div className="rate-val" style={{ color: "var(--gold-d)" }}>
+                ₹{Number(state.customRate).toLocaleString("en-IN")}/hr
+              </div>
+              <div className="rate-lbl">Your custom rate</div>
+            </div>
+          ) : (
+            <div className="rate-cell">
+              <div className="rate-val">{est.expLevel?.rangeLabel || "—"}</div>
+              <div className="rate-lbl">Market rate range</div>
+            </div>
+          )}
           <div className="rate-cell">
             <div className="rate-val">{inr(est.effRateMid)}/hr</div>
             <div className="rate-lbl">Effective billable rate</div>
@@ -2194,31 +2480,96 @@ function ResultsScreen({ state, onRestart }: any) {
         </div>
       </div>
 
-
-      {/* ── Client Justification      {/* ── Client Justification ── */}
       <div className="result-card">
         <div className="rc-title">Client-Ready Justification</div>
         <p className="jtext">{just}</p>
       </div>
 
       <div className="res-acts">
-        <button className="act act-p" onClick={download}>Download Breakdown</button>
-        <button className={`act act-g${copied ? " copied" : ""}`} onClick={copy}>
-          {copied ? "Copied ✓" : "Copy Justification"}
+        <button className="act act-p" onClick={download}>
+          {downloaded ? "Downloaded ✓" : "Download breakdown"}
         </button>
-
+        <button className={`act act-g${copied ? " copied" : ""}`} onClick={copy}>
+          {copied ? "Copied ✓" : "Copy justification"}
+        </button>
       </div>
-      <button className="restart" onClick={onRestart}>Start a new estimate</button>
+      <div className="res-acts" style={{ marginTop: 8 }}>
+        <button className="act act-g" onClick={onEdit} style={{ flex: 1 }}>
+          ← Edit estimate
+        </button>
+        <button className="act act-g" onClick={onRestart} style={{ flex: 1 }}>
+          New estimate
+        </button>
+      </div>
     </div>
   );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// APP — FLOW ORCHESTRATION
+// FLOW ROADMAP
+// ─────────────────────────────────────────────────────────────────────────────
+
+const STEPPER_LABELS = {
+  quick:          ["Project", "Hours", "Revisions", "Experience", "Your Rate", "Overhead", "Summary"],
+  scope:          ["Project", "Screens", "Platform", "Complexity", "System", "UX", "Revisions", "Experience", "Your Rate", "Overhead", "Summary"],
+  quick_graphic:  ["Hours", "Revisions", "Experience", "Your Rate", "Overhead", "Summary"],
+  quick_branding: ["Hours", "Revisions", "Experience", "Your Rate", "Overhead", "Summary"],
+  quick_video:    ["Hours", "Revisions", "Experience", "Your Rate", "Overhead", "Summary"],
+  scope_graphic:  ["Level", "Deliverables", "Brand Align.", "Complexity", "Add-ons", "Revisions", "Experience", "Your Rate", "Overhead", "Review", "Summary"],
+  scope_branding: ["Level", "Deliverables", "Scope", "Strategy", "Add-ons", "Revisions", "Experience", "Your Rate", "Overhead", "Review", "Summary"],
+  scope_video:    ["Level", "Duration", "Footage", "Complexity", "Add-ons", "Revisions", "Experience", "Your Rate", "Overhead", "Review", "Summary"],
+};
+
+function FlowRoadmap({ mode, role, flowStep }: any) {
+  const key    = role === "product" || !role ? mode : `${mode}_${role}`;
+  const labels = STEPPER_LABELS[key] || STEPPER_LABELS[mode];
+  const wrapRef = useRef(null);
+
+  useEffect(() => {
+    const wrap = wrapRef.current as HTMLElement | null;
+    if (!wrap) return;
+    const current = wrap.querySelector(".stepper-pill.current") as HTMLElement | null;
+    if (!current) return;
+    const wrapRect   = wrap.getBoundingClientRect();
+    const pillRect   = current.getBoundingClientRect();
+    const pillCenter = pillRect.left + pillRect.width / 2 - wrapRect.left;
+    wrap.scrollTo({ left: wrap.scrollLeft + pillCenter - wrapRect.width / 2, behavior: "smooth" });
+  }, [flowStep]);
+
+  if (!labels) return null;
+
+  return (
+    <div className="stepper" ref={wrapRef} style={{ overflowX: "auto", scrollbarWidth: "none" }}>
+      {labels.map((label, i) => {
+        const step    = i + 1;
+        const done    = flowStep > step;
+        const current = flowStep === step;
+        const state   = done ? "done" : current ? "current" : "upcoming";
+        return (
+          <div key={i} style={{ display: "flex", alignItems: "center" }}>
+            {i > 0 && <div className={`stepper-line${done || current ? " done-line" : ""}`} />}
+            <div className={`stepper-pill ${state}`}>
+              {done
+                ? <span className="stepper-icon">✓</span>
+                : !current && <span className="stepper-num">{step}</span>
+              }
+              <span>{label}</span>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// INIT STATE
 // ─────────────────────────────────────────────────────────────────────────────
 
 const INIT_STATE = {
+  role:             null,
   mode:             null,
+  projectLevel:     "standard",
   projectType:      null,
   hours:            "",
   primaryScreens:   0,
@@ -2228,6 +2579,7 @@ const INIT_STATE = {
   designSystem:     "none",
   revisions:        2,
   experience:       null,
+  customRate:       null,   // ₹/hr — overrides market range when set
   uxActivities:     [],
   pmOverhead:       "light",
   utilizationRate:  UTILIZATION_DEFAULT,
@@ -2236,89 +2588,42 @@ const INIT_STATE = {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// FLOW ROADMAP
+// APP — FLOW ORCHESTRATION
 // ─────────────────────────────────────────────────────────────────────────────
 
-const STEPPER_LABELS = {
-  quick: ["Project", "Hours", "Revisions", "Experience", "Overhead", "Summary"],
-  scope: ["Project", "Screens", "Platform", "Complexity", "System", "UX", "Revisions", "Experience", "Overhead", "Summary"],
-
-};
-
-function FlowRoadmap({ mode, flowStep }: any) {
-  const labels  = STEPPER_LABELS[mode];
-  const wrapRef = useRef(null);
-
-  // Scroll current pill into view whenever flowStep changes
-  useEffect(() => {
-    const wrap = wrapRef.current;
-    if (!wrap) return;
-    const current = wrap.querySelector(".stepper-pill.current");
-    if (!current) return;
-    const wrapRect    = wrap.getBoundingClientRect();
-    const pillRect    = current.getBoundingClientRect();
-    const pillCenter  = pillRect.left + pillRect.width / 2 - wrapRect.left;
-    const targetScroll = wrap.scrollLeft + pillCenter - wrapRect.width / 2;
-    wrap.scrollTo({ left: targetScroll, behavior: "smooth" });
-  }, [flowStep]);
-
-  if (!labels) return null;
-
-  return (
-    <div className="stepper-wrap" ref={wrapRef}>
-      <div className="stepper">
-        {labels.map((label, i) => {
-          const step    = i + 1;
-          const done    = flowStep > step;
-          const current = flowStep === step;
-          const state   = done ? "done" : current ? "current" : "upcoming";
-          return (
-            <div key={i} style={{ display: "flex", alignItems: "center" }}>
-              {i > 0 && (
-                <div className={`stepper-line${done || current ? " done-line" : ""}`} />
-              )}
-              <div className={`stepper-pill ${state}`}>
-                {done
-                  ? <span className="stepper-icon">✓</span>
-                  : !current && <span className="stepper-num">{step}</span>
-                }
-                <span>{label}</span>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
 function FairScopeEstimator() {
-  const [state,      setState]     = useState(INIT_STATE);
-  const [screen,     setScreen]    = useState("entry");
-  const [flowStep,   setFlowStep]  = useState(1);
-  const [sheetOpen,  setSheetOpen] = useState(false);
+  const [state,     setState]    = useState(INIT_STATE);
+  const [screen,    setScreen]   = useState("entry");
+  const [flowStep,  setFlowStep] = useState(1);
+  const [sheetOpen, setSheetOpen] = useState(false);
   const topRef = useRef(null);
 
   const upd = useCallback(patch => setState(s => ({ ...s, ...patch })), []);
-  const top  = useCallback(() => { setTimeout(() => topRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 40); }, []);
+  const top  = useCallback(() => { setTimeout(() => (topRef.current as HTMLElement | null)?.scrollIntoView({ behavior: "smooth", block: "start" }), 40); }, []);
 
-  const totalSteps = state.mode === "quick" ? 6 : 10;
+  // ── STEP COUNTS ──────────────────────────────────────────────────────────
+  function getTotalSteps() {
+    const r = state.role || "product";
+    // +1 everywhere for StepCustomRate (after Experience)
+    if (state.mode === "quick") return r === "product" ? 7 : 6;
+    return r === "product" ? 11 : 11;
+  }
+  const totalSteps = getTotalSteps();
   const pct = screen === "results" ? 100 : screen === "entry" ? 0 : ((flowStep - 1) / totalSteps) * 100;
   const stepMeta = screen === "flow" ? `Step ${flowStep} of ${totalSteps}` : screen === "results" ? "Complete" : "";
 
   function goStep(n) { setFlowStep(n); top(); }
   function next() {
-    const steps = state.mode === "quick" ? 6 : 10;
-    if (flowStep >= steps) { setScreen("results"); top(); }
+    if (flowStep >= totalSteps) { setScreen("results"); top(); }
     else goStep(flowStep + 1);
   }
-  function back()    {
+  function back() {
     if (flowStep <= 1) { setScreen("entry"); setState(INIT_STATE); top(); }
     else goStep(flowStep - 1);
   }
 
-  function startMode(m) {
-    upd({ mode: m });
+  function startMode(m, role) {
+    upd({ mode: m, role, flowComplexity: "moderate", platform: "single" });
     setFlowStep(1);
     setScreen("flow");
     top();
@@ -2331,20 +2636,29 @@ function FairScopeEstimator() {
     top();
   }
 
+  // Resume flow at last step (sustainability) so user can tweak without losing inputs
+  function goEdit() {
+    setScreen("flow");
+    setFlowStep(totalSteps);
+    top();
+  }
+
   function showResults() { setScreen("results"); top(); }
 
-  // ── QUICK FLOW STEPS ──────────────────────────────────────────────────────
-  const QUICK_STEPS = [
+  // ── STEP ARRAYS ──────────────────────────────────────────────────────────
+  const role = state.role || "product";
+
+  // PRODUCT DESIGN — unchanged flow
+  const PRODUCT_QUICK_STEPS = [
     () => <StepProjectType    state={state} onUpdate={upd} onNext={next} onBack={back} />,
     () => <StepHours          state={state} onUpdate={upd} onNext={next} onBack={back} />,
     () => <StepRevisions      state={state} onUpdate={upd} onNext={next} onBack={back} />,
     () => <StepExperience     state={state} onUpdate={upd} onNext={next} onBack={back} isFinal={false} />,
+    () => <StepCustomRate     state={state} onUpdate={upd} onNext={next} onBack={back} />,
     () => <StepPMOverhead     state={state} onUpdate={upd} onNext={next} onBack={back} />,
     () => <StepSustainability state={state} onUpdate={upd} onNext={showResults} onBack={back} />,
   ];
-
-  // ── SCOPE FLOW STEPS ──────────────────────────────────────────────────────
-  const SCOPE_STEPS = [
+  const PRODUCT_SCOPE_STEPS = [
     () => <StepProjectType    state={state} onUpdate={upd} onNext={next} onBack={back} />,
     () => <StepScreens        state={state} onUpdate={upd} onNext={next} onBack={back} />,
     () => <StepPlatform       state={state} onUpdate={upd} onNext={next} onBack={back} />,
@@ -2353,64 +2667,118 @@ function FairScopeEstimator() {
     () => <StepUXActivities   state={state} onUpdate={upd} onNext={next} onBack={back} />,
     () => <StepRevisions      state={state} onUpdate={upd} onNext={next} onBack={back} />,
     () => <StepExperience     state={state} onUpdate={upd} onNext={next} onBack={back} isFinal={false} />,
+    () => <StepCustomRate     state={state} onUpdate={upd} onNext={next} onBack={back} />,
     () => <StepPMOverhead     state={state} onUpdate={upd} onNext={next} onBack={back} />,
     () => <StepSustainability state={state} onUpdate={upd} onNext={showResults} onBack={back} />,
   ];
 
+  const ROLE_QUICK_STEPS = [
+    () => <StepHours          state={state} onUpdate={upd} onNext={next} onBack={back} />,
+    () => <StepRevisions      state={state} onUpdate={upd} onNext={next} onBack={back} />,
+    () => <StepExperience     state={state} onUpdate={upd} onNext={next} onBack={back} isFinal={false} />,
+    () => <StepCustomRate     state={state} onUpdate={upd} onNext={next} onBack={back} />,
+    () => <StepPMOverhead     state={state} onUpdate={upd} onNext={next} onBack={back} />,
+    () => <StepSustainability state={state} onUpdate={upd} onNext={showResults} onBack={back} />,
+  ];
 
+  const ROLE_SCOPE_STEPS = [
+    () => <StepProjectLevel   state={state} onUpdate={upd} onNext={next} onBack={back} />,
+    () => <StepRoleScope      state={state} onUpdate={upd} onNext={next} onBack={back} />,
+    () => <StepRolePlatform   state={state} onUpdate={upd} onNext={next} onBack={back} />,
+    () => <StepRoleComplexity state={state} onUpdate={upd} onNext={next} onBack={back} />,
+    () => <StepRoleAddons     state={state} onUpdate={upd} onNext={next} onBack={back} />,
+    () => <StepRevisions      state={state} onUpdate={upd} onNext={next} onBack={back} />,
+    () => <StepExperience     state={state} onUpdate={upd} onNext={next} onBack={back} isFinal={false} />,
+    () => <StepCustomRate     state={state} onUpdate={upd} onNext={next} onBack={back} />,
+    () => <StepPMOverhead     state={state} onUpdate={upd} onNext={next} onBack={back} />,
+    () => <StepRoleReview     state={state} onNext={next} onBack={back} jumpTo={goStep} />,
+    () => <StepSustainability state={state} onUpdate={upd} onNext={showResults} onBack={back} />,
+  ];
 
-  const STEPS = state.mode === "quick" ? QUICK_STEPS : SCOPE_STEPS;
+  // ── DISPATCH ─────────────────────────────────────────────────────────────
+  let STEPS: any[];
+  if (role === "product") {
+    STEPS = state.mode === "quick" ? PRODUCT_QUICK_STEPS : PRODUCT_SCOPE_STEPS;
+  } else {
+    STEPS = state.mode === "quick" ? ROLE_QUICK_STEPS : ROLE_SCOPE_STEPS;
+  }
+
   const currentStepFn = STEPS[flowStep - 1];
+  const roleObj = ROLES.find(r => r.id === role);
 
   return (
     <>
       <style>{CSS}</style>
       <div className="layout" ref={topRef}>
-        {/* ── MAIN COLUMN ── */}
         <div className="main-col">
           <div className="header-sticky">
             <header className="app-header">
               <div className="logo">Fair<span>Scope</span></div>
-              {stepMeta && <div className="step-counter">{stepMeta}</div>}
+              <div className="header-right">
+                {screen !== "entry" && (
+                  <button
+                    className="header-new-btn"
+                    onClick={restart}
+                    title="Start a new estimate"
+                  >
+                    + New
+                  </button>
+                )}
+                {screen === "flow" && state.role && (
+                  <span className="role-badge">{roleObj?.label}</span>
+                )}
+                {stepMeta && (
+                  <div
+                    className="step-counter"
+                    data-short={screen === "flow" ? `${flowStep} / ${totalSteps}` : "✓"}
+                  >
+                    <span className="step-counter-full">{stepMeta}</span>
+                  </div>
+                )}
+              </div>
             </header>
-
-            <div className="progress-wrap">
+            <div className="progress-wrap header-row">
               <div className="progress-track">
                 <div className="progress-fill" style={{ width: `${pct}%` }} />
               </div>
             </div>
-
             {screen === "flow" && state.mode && (
-              <FlowRoadmap mode={state.mode} flowStep={flowStep} />
+              <div className="stepper-wrap header-row">
+                <FlowRoadmap mode={state.mode} role={state.role} flowStep={flowStep} />
+              </div>
             )}
           </div>
 
           <div className="main-inner">
             {screen === "entry"   && <EntryScreen onSelect={startMode} />}
             {screen === "flow"    && currentStepFn && currentStepFn()}
-            {screen === "results" && <ResultsScreen state={state} onRestart={restart} />}
+            {screen === "results" && <ResultsScreen state={state} onRestart={restart} onEdit={goEdit} />}
           </div>
+          <MakerFooter />
         </div>
 
-        {/* ── DESKTOP SIDEBAR ── */}
         <aside className="sidebar">
           <div className="sb-wordmark">Fair<span>Scope</span></div>
           <LivePanel state={state} />
         </aside>
       </div>
 
-      {/* ── MOBILE STICKY BAR ── */}
       {screen !== "entry" && (
-        <MobileBar state={state} onTap={() => setSheetOpen(true)} />
+        <MobileBar
+          state={state}
+          screen={screen}
+          flowStep={flowStep}
+          totalSteps={totalSteps}
+          onTap={() => setSheetOpen(true)}
+        />
       )}
-
-      {/* ── MOBILE BOTTOM SHEET ── */}
       {sheetOpen && (
         <BottomSheet state={state} onClose={() => setSheetOpen(false)} />
       )}
     </>
   );
 }
+
 // ─────────────────────────────────────────────────────────────────────────────
 // ROOT
 // ─────────────────────────────────────────────────────────────────────────────
