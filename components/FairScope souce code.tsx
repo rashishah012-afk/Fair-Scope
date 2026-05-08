@@ -6,8 +6,6 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 // CONSTANTS & DATA — SHARED
 // ─────────────────────────────────────────────────────────────────────────────
 
-// ── ROLES ────────────────────────────────────────────────────────────────────
-// NEW: Role selector shown before mode selection
 const ROLES = [
   { id: "product",  label: "Product Designer",  sub: "UI/UX · Apps · Dashboards",      icon: "◈" },
   { id: "graphic",  label: "Graphic Designer",   sub: "Print · Social · Campaigns",     icon: "▣" },
@@ -15,7 +13,6 @@ const ROLES = [
   { id: "video",    label: "Video Editor",        sub: "Reels · Docs · Brand Films",     icon: "▶" },
 ];
 
-// ── PRODUCT DESIGN (UNCHANGED) ───────────────────────────────────────────────
 const PROJECT_TYPES = [
   { id: "landing",   label: "Landing Page",       sub: "Single-page, conversion-focused",   icon: "◈" },
   { id: "website",   label: "Multi-page Website",  sub: "5–15 pages, full structure",        icon: "▤" },
@@ -95,25 +92,17 @@ const PM_OVERHEAD = [
 // CONSTANTS — GRAPHIC DESIGN
 // ─────────────────────────────────────────────────────────────────────────────
 
-// "Screens" → "Deliverables" (primaryScreens = primary count, secondaryScreens = secondary count)
-// primaryScreens  = complex deliverables (e.g. poster, brochure, banner set) → 3 hrs each
-// secondaryScreens = simple deliverables (social cards, icons, resizes)       → 1 hr each
-
-// REBALANCED v2 — complexity is the ONLY multiplier (×1.0–1.3 max)
-// Brand alignment converted to flat hours (+2 hrs if no guidelines)
 const GRAPHIC_COMPLEXITY = [
   { id: "simple",   label: "Simple",   sub: "Flat graphics, minimal elements",        mult: 1.0,  tag: "×1.0"  },
   { id: "moderate", label: "Moderate", sub: "Layered layouts, typography play",       mult: 1.15, tag: "×1.15" },
   { id: "complex",  label: "Complex",  sub: "Illustration, custom art, rich detail",  mult: 1.3,  tag: "×1.3"  },
 ];
 
-// "Platform" → "Brand Alignment" — now flat hours, not a multiplier
 const GRAPHIC_BRAND_ALIGNMENT = [
   { id: "single", label: "Brand Guidelines Provided", sub: "Styles defined · faster execution",       flatHrs: 0 },
   { id: "multi",  label: "Brand to be Developed",     sub: "No guidelines · +2 hrs creative setup",   flatHrs: 2 },
 ];
 
-// "UX Activities" → "Add-ons" for graphic work — expanded with full industry options
 const GRAPHIC_ADDON_GROUPS = [
   {
     id: "production", label: "Production & Delivery",
@@ -162,24 +151,17 @@ const ALL_GRAPHIC_ADDONS = GRAPHIC_ADDON_GROUPS.flatMap(g => g.items);
 // CONSTANTS — BRANDING DESIGN
 // ─────────────────────────────────────────────────────────────────────────────
 
-// REBALANCED v2:
-// primaryScreens  = core brand deliverables → 10 hrs each (logo suite ~10 hrs realistic)
-// secondaryScreens = extended assets → 3 hrs each (templates, stationery)
-
-// "Flow Complexity" → Strategy Depth — ONLY multiplier kept
 const BRANDING_STRATEGY = [
   { id: "simple",   label: "Execution Only",    sub: "Brief is defined, jump straight to design",  mult: 1.0,  tag: "×1.0"  },
   { id: "moderate", label: "Strategy + Design", sub: "Brand positioning + discovery included",     mult: 1.25, tag: "×1.25" },
   { id: "complex",  label: "Full Strategy",     sub: "Research, positioning, naming, full system", mult: 1.5,  tag: "×1.5"  },
 ];
 
-// "Platform" → Brand Scope — converted to flat hours (+5 hrs for print), not a multiplier
 const BRANDING_SCOPE = [
   { id: "single", label: "Digital Only",     sub: "Online brand assets · screen-first",        flatHrs: 0 },
   { id: "multi",  label: "Digital + Print",  sub: "Full brand across media · +5 hrs print prep", flatHrs: 5 },
 ];
 
-// "UX Activities" → Branding Add-ons — rebalanced to realistic flat hours
 const BRANDING_ADDON_GROUPS = [
   {
     id: "core", label: "Core Deliverables",
@@ -213,23 +195,17 @@ const ALL_BRANDING_ADDONS = BRANDING_ADDON_GROUPS.flatMap(g => g.items);
 // CONSTANTS — VIDEO EDITING
 // ─────────────────────────────────────────────────────────────────────────────
 
-// "Primary Screens" → Output Duration (minutes)
-// "Secondary Screens" → Raw Footage Hours
-
-// "Platform" → Footage-to-Output Ratio Multiplier
 const VIDEO_FOOTAGE_RATIO = [
   { id: "single", label: "Light Footage  (1–3× output)", sub: "Short brand clips, interviews with script", mult: 1.0 },
   { id: "multi",  label: "Heavy Footage  (4–10× output)", sub: "Events, documentaries, long-form · +30%",  mult: 1.3 },
 ];
 
-// "Flow Complexity" → Editing Complexity
 const VIDEO_COMPLEXITY = [
   { id: "simple",   label: "Basic Cut",       sub: "Linear edit, minimal graphics",         mult: 1.0, tag: "×1.0" },
   { id: "moderate", label: "Motion & Grade",  sub: "B-roll, titles, basic color grade",     mult: 1.3, tag: "×1.3" },
   { id: "complex",  label: "Full Production", sub: "Complex transitions, VFX, sound design", mult: 1.6, tag: "×1.6" },
 ];
 
-// "UX Activities" → Video Add-ons
 const VIDEO_ADDON_GROUPS = [
   {
     id: "post", label: "Post-Production Add-ons",
@@ -259,34 +235,16 @@ const UTILIZATION_DEFAULT    = 0.75;
 const FREELANCE_MULT_DEFAULT = 1.05;
 const GST_RATE               = 0.18;
 
-// ─────────────────────────────────────────────────────────────────────────────
-// PROJECT LEVEL — adjustment layer for non-product roles only
-// ─────────────────────────────────────────────────────────────────────────────
-//
-//  Three levers, applied AFTER the role-specific hour engine runs:
-//    baseHrsMult  → scales the raw deliverable base hours (before multipliers)
-//    addonScale   → scales add-on flat hours (e.g. Basic treats addons as lighter)
-//    bufferMult   → replaces the role's default ops buffer %
-//
-//  Rate anchor: Basic uses rateMin, Standard uses (rateMin+rate)/2, Premium uses rate
-//  This means level controls BOTH hours AND rate — the two biggest pricing levers.
-//
-//  Premium = current rebalanced logic (all mults = 1.0, no change to calibrated values).
-//  Product design is not affected by this constant at all.
-
 const PROJECT_LEVELS = [
   {
     id:          "basic",
     label:       "Basic",
     sub:         "Quick turnaround, simple brief, price-sensitive client",
     icon:        "·",
-    // Hours: lighter base, addons at 60%, minimal buffer
-    baseHrsMult: 0.7,   // deliverable base × 0.7 (quicker execution assumed)
-    addonScale:  0.6,   // add-on hrs × 0.6 (simpler versions of each add-on)
-    bufferMult:  0.05,  // ops buffer = 5% (very lean)
-    // Rate: use rateMin as the pricing anchor
+    baseHrsMult: 0.7,
+    addonScale:  0.6,
+    bufferMult:  0.05,
     rateAnchor:  "min",
-    // Revision cap: 1 cycle at 4%
     revCycles:   1,
     revPct:      0.04,
     tag:         "Budget-friendly",
@@ -296,11 +254,9 @@ const PROJECT_LEVELS = [
     label:       "Standard",
     sub:         "Typical freelance project, clear scope, professional output",
     icon:        "◆",
-    // Hours: current calibrated base (no scaling), addons at 85%
     baseHrsMult: 1.0,
     addonScale:  0.85,
-    bufferMult:  0.08,  // same as current graphic default
-    // Rate: midpoint between rateMin and rate midpoint
+    bufferMult:  0.08,
     rateAnchor:  "mid-low",
     revCycles:   2,
     revPct:      0.05,
@@ -311,43 +267,15 @@ const PROJECT_LEVELS = [
     label:       "Premium",
     sub:         "High-polish work, senior expectations, agency-grade output",
     icon:        "◈",
-    // Hours: premium adds 20% to base (more iteration assumed), full addons
     baseHrsMult: 1.2,
     addonScale:  1.0,
-    bufferMult:  0.10,  // current branding buffer — highest for premium
-    // Rate: full rate midpoint (current behavior)
+    bufferMult:  0.10,
     rateAnchor:  "mid",
     revCycles:   2,
     revPct:      0.08,
     tag:         "Agency-grade",
   },
 ];
-
-// ─────────────────────────────────────────────────────────────────────────────
-// ARCHITECTURE NOTE (inline, for developer clarity)
-// ─────────────────────────────────────────────────────────────────────────────
-//
-//  calcEstimate(state)
-//    └─ if role === "product"   → existing product logic (UNCHANGED)
-//    └─ if role === "graphic"   → calcHoursGraphic(state)  → designHrs + scopeRows
-//    └─ if role === "branding"  → calcHoursBranding(state) → designHrs + scopeRows
-//    └─ if role === "video"     → calcHoursVideo(state)    → designHrs + scopeRows
-//
-//  All roles share the SAME cost / pricing layers after designHrs is set:
-//    effRate = midRate / utilization
-//    designCost = designHrs × effRate
-//    pmCost = designCost × pmPct
-//    total = (designCost + pmCost) × freeMult [+ GST]
-//
-//  UI field mappings per role:
-//    "Primary Screens"    → Graphic: complex deliverables | Branding: core deliverables | Video: output minutes
-//    "Secondary Screens"  → Graphic: simple deliverables  | Branding: extended assets   | Video: raw footage hrs
-//    "Platform"           → Graphic: brand alignment      | Branding: brand scope        | Video: footage ratio
-//    "Flow Complexity"    → Graphic: visual complexity    | Branding: strategy depth     | Video: edit complexity
-//    "Design System"      → (not used for non-product; defaulted to "none")
-//    "UX Activities"      → Graphic: graphic add-ons      | Branding: brand add-ons      | Video: video add-ons
-//
-// ─────────────────────────────────────────────────────────────────────────────
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CALCULATION ENGINE
@@ -364,26 +292,6 @@ function inr(n) {
   return "₹" + Math.round(n).toLocaleString("en-IN");
 }
 
-// ── GRAPHIC DESIGN HOURS ENGINE — REBALANCED v2 + PROJECT LEVEL ──────────────
-//
-//  projectLevel controls:
-//    lv.baseHrsMult  → scales deliverable base hours before complexity mult
-//    lv.addonScale   → scales add-on flat hours
-//    lv.bufferMult   → overrides the ops buffer %
-//    lv.revCycles    → caps revision cycles
-//    lv.revPct       → revision % per cycle
-//
-//  FLOW:
-//  1. complexBase = primaryScreens × 1.5 × lv.baseHrsMult
-//  2. simpleBase  = secondaryScreens × 0.5 × lv.baseHrsMult
-//  3. afterCX     = (complexBase + simpleBase) × cx  (complexity — ONLY multiplier)
-//  4. brandFlat   stays flat hrs (not scaled — it's a setup cost, not deliverable effort)
-//  5. addonHrs    = SUM(addons) × lv.addonScale
-//  6. scopeBase   = afterCX + brandFlat + addonHrs
-//  7. revHrs      = scopeBase × (lv.revCycles × lv.revPct)
-//  8. bufHrs      = (scopeBase + revHrs) × lv.bufferMult
-//  9. designHrs   = scopeBase + revHrs + bufHrs
-//
 function calcHoursGraphic(s) {
   const lv        = PROJECT_LEVELS.find(l => l.id === (s.projectLevel || "standard")) || PROJECT_LEVELS[1];
   const cx        = GRAPHIC_COMPLEXITY.find(f => f.id === s.flowComplexity)?.mult || 1.0;
@@ -426,25 +334,6 @@ function calcHoursGraphic(s) {
   return { designHrs, scopeRows, hrsDetail };
 }
 
-// ── BRANDING DESIGN HOURS ENGINE — REBALANCED v2 + PROJECT LEVEL ─────────────
-//
-//  projectLevel controls same levers as graphic:
-//    lv.baseHrsMult  → scales core + extended deliverable base hrs
-//    lv.addonScale   → scales add-on flat hours
-//    lv.bufferMult   → overrides ops buffer %
-//    lv.revCycles / lv.revPct → revision parameters
-//
-//  FLOW:
-//  1. coreBase     = primaryScreens × 10 × lv.baseHrsMult
-//  2. extendedBase = secondaryScreens × 3 × lv.baseHrsMult
-//  3. afterStrategy = (coreBase + extendedBase) × st  (strategy depth — ONLY multiplier)
-//  4. scopeFlat    stays flat hrs (print setup cost, not scaled)
-//  5. addonHrs     = SUM(addons) × lv.addonScale
-//  6. scopeBase    = afterStrategy + scopeFlat + addonHrs
-//  7. revHrs       = scopeBase × (lv.revCycles × lv.revPct)
-//  8. bufHrs       = (scopeBase + revHrs) × lv.bufferMult
-//  9. designHrs    = scopeBase + revHrs + bufHrs
-//
 function calcHoursBranding(s) {
   const lv        = PROJECT_LEVELS.find(l => l.id === (s.projectLevel || "standard")) || PROJECT_LEVELS[1];
   const st        = BRANDING_STRATEGY.find(f => f.id === s.flowComplexity)?.mult || 1.0;
@@ -488,25 +377,6 @@ function calcHoursBranding(s) {
   return { designHrs, scopeRows, hrsDetail };
 }
 
-// ── VIDEO EDITING HOURS ENGINE ───────────────────────────────────────────────
-//
-//  PSEUDOCODE (calcHoursVideo):
-//  ─────────────────────────────
-//  INPUT: primaryScreens (output duration in minutes), secondaryScreens (raw footage hrs),
-//         platform (footage ratio mult), flowComplexity (edit complexity mult),
-//         uxActivities (video add-on IDs), revisions
-//
-//  1. BASE EFFORT: outputMins × 1.5 hrs/min (editing takes ~1.5 hrs per output minute)
-//  2. footageAdj  = If heavy footage: secondaryScreens × 0.5 (each raw footage hr adds effort)
-//  3. durationBase = outputMins × 1.5 + footageAdj
-//  4. afterRatio   = durationBase × VIDEO_FOOTAGE_RATIO[platform].mult
-//  5. afterCX      = afterRatio   × VIDEO_COMPLEXITY[flowComplexity].mult
-//  6. addonHrs     = SUM(selected uxActivities hrs from ALL_VIDEO_ADDONS)
-//  7. scopeBase    = afterCX + addonHrs
-//  8. revHrs       = scopeBase × (revisions × 0.10)
-//  9. bufHrs       = (scopeBase + revHrs) × 0.15
-//  10. designHrs   = scopeBase + revHrs + bufHrs
-//
 function calcHoursVideo(s) {
   const fr   = VIDEO_FOOTAGE_RATIO.find(p => p.id === s.platform)?.mult || 1.0;
   const cx   = VIDEO_COMPLEXITY.find(f => f.id === s.flowComplexity)?.mult || 1.3;
@@ -514,11 +384,11 @@ function calcHoursVideo(s) {
     (sum, id) => sum + (ALL_VIDEO_ADDONS.find(u => u.id === id)?.hrs || 0), 0
   );
 
-  const outputMins    = s.primaryScreens  || 0;   // reused as "output duration (minutes)"
-  const rawFootageHrs = s.secondaryScreens || 0;  // reused as "raw footage hours"
+  const outputMins    = s.primaryScreens  || 0;
+  const rawFootageHrs = s.secondaryScreens || 0;
 
-  const durationBase  = outputMins * 1.5;                // 1.5 hrs editing per output minute
-  const footageAdj    = rawFootageHrs * 0.5;             // 0.5 hrs per raw footage hour
+  const durationBase  = outputMins * 1.5;
+  const footageAdj    = rawFootageHrs * 0.5;
   const baseHrs       = durationBase + footageAdj;
   const afterRatio    = baseHrs * fr;
   const afterCX       = afterRatio * cx;
@@ -551,21 +421,11 @@ function calcHoursVideo(s) {
   return { designHrs, scopeRows, hrsDetail };
 }
 
-// ── UNIFIED CALCULATION ENGINE ────────────────────────────────────────────────
-// This is the ONLY function that the app calls. It dispatches by role.
-// Product design logic is completely unchanged — just wrapped in a role guard.
-
 function calcEstimate(s) {
   const expLevel    = EXPERIENCE_LEVELS.find(e => e.id === s.experience);
   const role        = s.role || "product";
   const lv          = PROJECT_LEVELS.find(l => l.id === (s.projectLevel || "standard")) || PROJECT_LEVELS[1];
 
-  // Product design: completely unchanged rate logic.
-  // Non-product roles: rate anchor is driven by projectLevel.
-  //   Basic    → rateMin  (lower bound — budget clients, quick jobs)
-  //   Standard → (rateMin + rate) / 2  (realistic middle ground)
-  //   Premium  → rate midpoint (full market midpoint — current behavior)
-  // Max rate for range ceiling: one bracket above midRate in all non-product cases.
   let midRate: number;
   let maxRate: number;
   if (role === "product") {
@@ -576,12 +436,11 @@ function calcEstimate(s) {
     const rMid = expLevel?.rate    || 2750;
     if (lv.rateAnchor === "min") {
       midRate = rMin;
-      maxRate = rMid;                           // low: rateMin, high: midpoint
+      maxRate = rMid;
     } else if (lv.rateAnchor === "mid-low") {
       midRate = Math.round((rMin + rMid) / 2);
-      maxRate = rMid;                           // low: halfway, high: midpoint
+      maxRate = rMid;
     } else {
-      // "mid" = Premium: same as previous v2 behavior
       midRate = rMid;
       maxRate = expLevel?.rateMax || rMid * 1.45;
     }
@@ -591,14 +450,10 @@ function calcEstimate(s) {
   const freeMult    = s.freelanceMult    ?? FREELANCE_MULT_DEFAULT;
   const pmPct       = PM_OVERHEAD.find(p => p.id === (s.pmOverhead || "standard"))?.pct ?? 0.15;
 
-  // Custom rate override: if the freelancer has set their own ₹/hr,
-  // derive a professional range around it: low = custom rate (after utilization),
-  // high = custom rate × 1.2 (accounts for premium positioning / complexity variance).
-  // This gives a meaningful range instead of a flat single value.
   if (s.customRate && Number(s.customRate) > 0) {
     const cr = Number(s.customRate);
     midRate  = cr;
-    maxRate  = Math.round(cr * 1.20); // +20% spread for the upper estimate
+    maxRate  = Math.round(cr * 1.20);
   }
 
   const effRateMid = midRate / utilization;
@@ -606,7 +461,6 @@ function calcEstimate(s) {
 
   let designHrs, hrsDetail, scopeRows;
 
-  // ── PRODUCT DESIGN (UNCHANGED) ─────────────────────────────────────────────
   if (!s.role || s.role === "product") {
     if (s.mode === "quick") {
       const base   = Number(s.hours) || 0;
@@ -658,9 +512,7 @@ function calcEstimate(s) {
       scopeRows.push({ label: `Revisions (${s.revisions} × 10%)`,  note: `+${Math.round(revHrs)} hrs`, hrs: revHrs });
       scopeRows.push({ label: "Operational buffer (15%)",           note: `+${Math.round(bufHrs)} hrs`, hrs: bufHrs });
     }
-  }
-  // ── GRAPHIC DESIGN ─────────────────────────────────────────────────────────
-  else if (s.role === "graphic") {
+  } else if (s.role === "graphic") {
     if (s.mode === "quick") {
       const base   = Number(s.hours) || 0;
       const revHrs = base * (s.revisions * 0.10);
@@ -678,9 +530,7 @@ function calcEstimate(s) {
       scopeRows     = result.scopeRows;
       hrsDetail     = result.hrsDetail;
     }
-  }
-  // ── BRANDING DESIGN ────────────────────────────────────────────────────────
-  else if (s.role === "branding") {
+  } else if (s.role === "branding") {
     if (s.mode === "quick") {
       const base   = Number(s.hours) || 0;
       const revHrs = base * (s.revisions * 0.10);
@@ -698,9 +548,7 @@ function calcEstimate(s) {
       scopeRows     = result.scopeRows;
       hrsDetail     = result.hrsDetail;
     }
-  }
-  // ── VIDEO EDITING ──────────────────────────────────────────────────────────
-  else if (s.role === "video") {
+  } else if (s.role === "video") {
     if (s.mode === "quick") {
       const base   = Number(s.hours) || 0;
       const revHrs = base * (s.revisions * 0.10);
@@ -720,7 +568,6 @@ function calcEstimate(s) {
     }
   }
 
-  // ── SHARED COST LAYERS (identical for all roles) ──────────────────────────
   const designCostMid = designHrs * effRateMid;
   const designCostMax = designHrs * effRateMax;
   const pmCostMid     = designCostMid * pmPct;
@@ -754,7 +601,7 @@ function calcEstimate(s) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// JUSTIFICATION — role-aware but same structure
+// JUSTIFICATION
 // ─────────────────────────────────────────────────────────────────────────────
 
 function buildJustification(s, est) {
@@ -876,7 +723,7 @@ function getScopeStepTitle(role) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// CSS — unchanged from original + role selector additions
+// CSS
 // ─────────────────────────────────────────────────────────────────────────────
 
 const CSS = `
@@ -1013,7 +860,6 @@ html, body {
   .app-header { padding: 12px 24px; }
 }
 
-/* Shared inner-width constraint — all header children use this */
 .header-row {
   max-width: 760px;
   width: 100%;
@@ -1027,7 +873,6 @@ html, body {
 .logo { font-family: var(--serif); font-size: 15px; font-weight: 500; letter-spacing: 0.06em; color: var(--ink); flex-shrink: 0; }
 .logo span { color: var(--gold); }
 
-/* Header right cluster — never overflows its side */
 .header-right {
   display: flex;
   align-items: center;
@@ -1036,7 +881,6 @@ html, body {
   flex-shrink: 0;
 }
 
-/* Persistent "New estimate" button in header */
 .header-new-btn {
   font-size: 11.5px; font-weight: 400; font-family: var(--sans);
   color: var(--ink3); background: none;
@@ -1047,7 +891,6 @@ html, body {
 }
 .header-new-btn:hover { color: var(--ink); border-color: var(--ink3); }
 
-/* Role badge — hidden on small mobile, shown on tablet+ */
 .role-badge {
   font-size: 10.5px; font-weight: 500; letter-spacing: 0.1em;
   text-transform: uppercase; color: var(--gold-d);
@@ -1056,19 +899,15 @@ html, body {
   white-space: nowrap; flex-shrink: 0;
 }
 @media (max-width: 560px) {
-  /* Hide role badge on small screens — stepper already shows this context */
   .role-badge { display: none; }
-  /* Shrink +New label */
   .header-new-btn { padding: 4px 9px; font-size: 11px; }
 }
 
-/* Desktop: verbose "Step 3 of 9" */
 .step-counter {
   font-size: 11px; font-weight: 300; color: var(--ink3); letter-spacing: 0.08em;
   white-space: nowrap; flex-shrink: 0;
 }
 
-/* Mobile: compact "3 / 9" badge — visually distinct from the named stepper pills */
 @media (max-width: 768px) {
   .step-counter {
     font-size: 11px; font-weight: 500; letter-spacing: 0.04em;
@@ -1154,13 +993,42 @@ html, body {
 .num-in:focus { border-color: var(--gold); }
 .num-unit { position: absolute; right: 15px; top: 50%; transform: translateY(-50%); font-size: 12px; font-weight: 300; color: var(--ink3); font-family: var(--sans); }
 
+/* Gate step text inputs */
+.gate-in {
+  width: 100%; padding: 13px 16px;
+  font-size: 15px; font-family: var(--sans); font-weight: 400;
+  color: var(--ink); background: var(--surface);
+  border: 1.5px solid var(--border2); border-radius: var(--r);
+  outline: none; transition: border-color var(--t);
+}
+.gate-in:focus { border-color: var(--gold); }
+.gate-in::placeholder { color: var(--border2); font-weight: 300; }
+.gate-in.readonly { color: var(--ink3); background: var(--panel); border-color: var(--border); cursor: default; }
+.gate-field { margin-bottom: 14px; }
+.gate-label { font-size: 12px; font-weight: 500; letter-spacing: 0.04em; color: var(--ink2); margin-bottom: 6px; }
+.gate-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 4px; }
+@media (max-width: 480px) { .gate-pair { grid-template-columns: 1fr; } }
+.gate-privacy {
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--r);
+  padding: 11px 14px; margin-bottom: 20px;
+  font-size: 12.5px; font-weight: 300; color: var(--ink3); line-height: 1.5;
+  display: flex; align-items: flex-start; gap: 9px;
+}
+.gate-privacy-icon { flex-shrink: 0; font-size: 14px; margin-top: 1px; }
+.gate-badge {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: var(--sbg); border: 1px solid var(--success-bd);
+  border-radius: 20px; padding: 5px 13px;
+  font-size: 12px; font-weight: 500; color: var(--success);
+  margin-bottom: 20px;
+}
+
 .screens-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 16px; }
 @media (max-width: 480px) { .screens-pair { grid-template-columns: 1fr; } }
 
 .warn-box { background: var(--warn-bg); border: 1.5px solid var(--warn-bd); border-radius: var(--r); padding: 11px 14px; font-size: 13px; font-weight: 300; color: var(--warn-tx); margin-bottom: 14px; line-height: 1.5; }
 .info-note { font-size: 12.5px; font-weight: 300; color: var(--ink3); margin-bottom: 22px; padding: 10px 14px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r); line-height: 1.5; }
 
-/* Custom rate preview card */
 .custom-rate-preview {
   background: var(--gold-l); border: 1.5px solid var(--gold-bd);
   border-radius: var(--r2); padding: 16px 18px; margin-bottom: 20px;
@@ -1204,7 +1072,6 @@ html, body {
 .ec-arrow { position: absolute; right: 22px; top: 50%; transform: translateY(-50%); font-size: 20px; color: var(--border2); transition: color var(--t), transform var(--t); }
 .entry-card:hover .ec-arrow { color: var(--gold); transform: translateY(-50%) translateX(3px); }
 
-/* ── ROLE SELECTOR ── */
 .role-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; margin-bottom: 24px; }
 @media (max-width: 480px) { .role-grid { grid-template-columns: 1fr; } }
 .role-card { background: var(--surface); border: 1.5px solid var(--border); border-radius: var(--r2); padding: 16px 18px 14px; cursor: pointer; transition: border-color var(--t), background var(--t), transform 0.1s; text-align: left; width: 100%; font-family: var(--sans); }
@@ -1215,7 +1082,6 @@ html, body {
 .role-label { font-size: 14px; font-weight: 500; color: var(--ink); display: block; margin-bottom: 3px; }
 .role-sub   { font-size: 12px; font-weight: 300; color: var(--ink3); }
 
-/* ── RESULTS ── */
 .result-wrap { animation: screenIn 0.4s cubic-bezier(.4,0,.2,1) both; }
 .range-hero { background: var(--sbg); border: 1.5px solid var(--success-bd); border-radius: var(--r2); padding: 30px 28px; margin-bottom: 14px; }
 .rh-eyebrow { font-size: 11px; font-weight: 500; letter-spacing: 0.15em; text-transform: uppercase; color: var(--success); opacity: 0.65; margin-bottom: 9px; }
@@ -1310,15 +1176,19 @@ html, body {
 .rate-val  { font-family: var(--serif); font-size: 18px; color: var(--gold-d); font-weight: 500; line-height: 1.2; margin-bottom: 3px; }
 .rate-lbl  { font-size: 12px; font-weight: 300; color: var(--ink2); }
 
-/* Input mapping info box */
 .mapping-note {
   background: var(--surface); border: 1px solid var(--border); border-radius: var(--r);
   padding: 10px 14px; margin-bottom: 18px;
   font-size: 12px; font-weight: 300; color: var(--ink3); line-height: 1.5;
 }
 .mapping-note strong { color: var(--gold-d); font-weight: 500; }
-
-/* ── MAKER FOOTER ── */
+/* ── FORM GATE ── */
+.fg-field { margin-bottom: 16px; }
+.fg-label { font-size: 12px; font-weight: 500; letter-spacing: 0.04em; color: var(--ink2); margin-bottom: 7px; display: block; }
+.fg-input { width: 100%; padding: 13px 16px; font-size: 15px; font-family: var(--sans); font-weight: 400; color: var(--ink); background: var(--surface); border: 1.5px solid var(--border2); border-radius: var(--r); outline: none; transition: border-color var(--t); }
+.fg-input::placeholder { color: var(--border2); font-weight: 300; }
+.fg-input:focus { border-color: var(--gold); }
+.fg-privacy { font-size: 12px; font-weight: 300; color: var(--ink3); margin-bottom: 20px; line-height: 1.6; }
 .maker-footer {
   width: 100%;
   max-width: 760px;
@@ -1376,7 +1246,7 @@ function MakerFooter() {
       </p>
       <a
         className="mf-btn"
-        href="https://your-portfolio-link.com"
+        href="https://rashi.framer.ai/"
         target="_blank"
         rel="noopener noreferrer"
       >
@@ -1387,7 +1257,7 @@ function MakerFooter() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// PRIMITIVE COMPONENTS (unchanged)
+// PRIMITIVE COMPONENTS
 // ─────────────────────────────────────────────────────────────────────────────
 
 function PrimaryBtn({ onClick, disabled = false, children }: any) {
@@ -1586,7 +1456,7 @@ function BottomSheet({ state, onClose }: any) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// ENTRY SCREEN — Role selector → Mode selector
+// ENTRY SCREEN
 // ─────────────────────────────────────────────────────────────────────────────
 
 function EntryScreen({ onSelect }: any) {
@@ -1595,7 +1465,6 @@ function EntryScreen({ onSelect }: any) {
 
   function pickRole(id: string) {
     setSelectedRole(id);
-    // Scroll to mode section after a brief paint delay
     setTimeout(() => {
       modeRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     }, 80);
@@ -1621,7 +1490,6 @@ function EntryScreen({ onSelect }: any) {
         ))}
       </div>
 
-      {/* Mode section scrolls into view after role pick */}
       <div ref={modeRef} style={{ scrollMarginTop: "80px" }}>
         {selectedRole && (
           <>
@@ -1654,7 +1522,6 @@ function EntryScreen({ onSelect }: any) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 function StepProjectType({ state, onUpdate, onNext, onBack }: any) {
-  // Only product design uses this step; other roles skip to screens/scope
   return (
     <div className="screen">
       <Back onClick={onBack} />
@@ -1691,16 +1558,10 @@ function StepExperience({ state, onUpdate, onNext, onBack, isFinal }: any) {
   );
 }
 
-// ── CUSTOM RATE STEP ──────────────────────────────────────────────────────────
-// Optional. If filled, overrides the market range with the freelancer's own rate.
-// If skipped, the market range from the Experience step applies as normal.
-
 function StepCustomRate({ state, onUpdate, onNext, onBack }: any) {
   const expLevel = EXPERIENCE_LEVELS.find(e => e.id === state.experience);
   const suggested = expLevel?.rangeLabel || "market range";
   const cr = state.customRate ? Number(state.customRate) : null;
-
-  // Live preview: what the estimate will look like at their custom rate
   const previewRate = cr && cr > 0 ? cr : null;
 
   return (
@@ -1807,7 +1668,6 @@ function StepSustainability({ state, onUpdate, onNext, onBack }: any) {
         These reflect costs that salaried employees never see — but freelancers carry every month. The defaults are calibrated for the Indian market. Adjust only if your situation is different.
       </p>
 
-      {/* ── Utilization ── */}
       <div className="sus-block">
         <div className="sus-row-hd">
           <div className="sus-lbl">Billable utilization</div>
@@ -1831,7 +1691,6 @@ function StepSustainability({ state, onUpdate, onNext, onBack }: any) {
         )}
       </div>
 
-      {/* ── Freelance premium ── */}
       <div className="sus-block">
         <div className="sus-row-hd">
           <div className="sus-lbl">Business overhead multiplier</div>
@@ -1849,7 +1708,6 @@ function StepSustainability({ state, onUpdate, onNext, onBack }: any) {
         </div>
       </div>
 
-      {/* ── GST ── */}
       <div className={"gst-row" + (state.includeGST ? " gst-on" : "")} onClick={() => onUpdate({ includeGST: !state.includeGST })}>
         <div>
           <div className="gst-label">Include GST (18%)</div>
@@ -1860,7 +1718,7 @@ function StepSustainability({ state, onUpdate, onNext, onBack }: any) {
         </div>
       </div>
 
-      <GoldBtn onClick={onNext}>Generate Estimate →</GoldBtn>
+      <GoldBtn onClick={onNext}>Continue →</GoldBtn>
     </div>
   );
 }
@@ -1893,7 +1751,7 @@ function StepHours({ state, onUpdate, onNext, onBack }: any) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// PRODUCT DESIGN STEPS (UNCHANGED)
+// PRODUCT DESIGN STEPS
 // ─────────────────────────────────────────────────────────────────────────────
 
 function StepScreens({ state, onUpdate, onNext, onBack }: any) {
@@ -1997,7 +1855,7 @@ function StepUXActivities({ state, onUpdate, onNext, onBack }: any) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// PROJECT LEVEL STEP — inserted as step 1 in non-product scope builder
+// PROJECT LEVEL STEP
 // ─────────────────────────────────────────────────────────────────────────────
 
 function StepProjectLevel({ state, onUpdate, onNext, onBack }: any) {
@@ -2028,13 +1886,11 @@ function StepProjectLevel({ state, onUpdate, onNext, onBack }: any) {
   );
 }
 
-// Reusable "scope/deliverables" step for non-product roles
 function StepRoleScope({ state, onUpdate, onNext, onBack }: any) {
   const role   = state.role;
   const pl     = getPrimaryLabel(role);
   const sl     = getSecondaryLabel(role);
   const titles = getScopeStepTitle(role);
-  const total  = state.primaryScreens + state.secondaryScreens;
 
   return (
     <div className="screen">
@@ -2081,7 +1937,6 @@ function StepRoleScope({ state, onUpdate, onNext, onBack }: any) {
   );
 }
 
-// Reusable "platform" step for non-product roles
 function StepRolePlatform({ state, onUpdate, onNext, onBack }: any) {
   const role   = state.role;
   const opts   = getPlatformOptions(role);
@@ -2097,7 +1952,6 @@ function StepRolePlatform({ state, onUpdate, onNext, onBack }: any) {
   );
 }
 
-// Reusable "complexity" step for non-product roles
 function StepRoleComplexity({ state, onUpdate, onNext, onBack }: any) {
   const role   = state.role;
   const opts   = getComplexityOptions(role);
@@ -2113,7 +1967,6 @@ function StepRoleComplexity({ state, onUpdate, onNext, onBack }: any) {
   );
 }
 
-// Reusable "add-ons" step for non-product roles (maps to uxActivities field)
 function StepRoleAddons({ state, onUpdate, onNext, onBack }: any) {
   const role     = state.role;
   const groups   = getAddonGroups(role);
@@ -2158,7 +2011,7 @@ function StepRoleAddons({ state, onUpdate, onNext, onBack }: any) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// REVIEW STEP — non-product scope flow
+// REVIEW STEP
 // ─────────────────────────────────────────────────────────────────────────────
 
 function StepRoleReview({ state, onNext, onBack, jumpTo }: any) {
@@ -2211,7 +2064,136 @@ function StepRoleReview({ state, onNext, onBack, jumpTo }: any) {
           </div>
         ))}
       </div>
-      <GoldBtn onClick={onNext}>Looks good — generate →</GoldBtn>
+      <GoldBtn onClick={onNext}>Looks good — continue →</GoldBtn>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FORM GATE STEP — Formspree submission required before results
+// ─────────────────────────────────────────────────────────────────────────────
+
+function StepFormGate({ state, onUpdate, onNext, onBack }: any) {
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError]           = useState("");
+
+  const role     = ROLES.find(r => r.id === (state.role || "product"));
+  const exp      = EXPERIENCE_LEVELS.find(e => e.id === state.experience);
+  const lvLabel  = state.projectLevel && state.role !== "product"
+    ? (PROJECT_LEVELS.find(l => l.id === state.projectLevel)?.label || "") + " · "
+    : "";
+
+  const scopeSummary = state.mode === "quick"
+    ? `${state.hours || 0} hrs · Quick Estimate`
+    : state.role === "video"
+      ? `${state.primaryScreens || 0} min output`
+      : `${(state.primaryScreens || 0) + (state.secondaryScreens || 0)} deliverables`;
+
+  const prefill = `${role?.label || "Designer"} · ${lvLabel}${scopeSummary}`;
+
+  async function handleSubmit() {
+    const name  = (state.gateName  || "").trim();
+    const email = (state.gateEmail || "").trim();
+
+    if (!name || !email) {
+      setError("Please fill in both your name and contact number.");
+      return;
+    }
+    if (!/^[\d\s\+\-\(\)]{7,15}$/.test(email)) {
+      setError("Please enter a valid contact number.");
+      return;
+    }
+
+    setError("");
+    setSubmitting(true);
+
+    try {
+      const res = await fetch("https://formspree.io/f/xbdwknoe", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json", "Accept": "application/json" },
+        body: JSON.stringify({
+          name,
+          phone:        email,
+          role:         role?.label        || "",
+          experience:   exp?.label         || "",
+          projectLevel: state.projectLevel || "",
+          mode:         state.mode         || "",
+          scope:        prefill,
+        }),
+      });
+
+      if (res.ok) {
+        onNext();
+      } else {
+        const data = await res.json().catch(() => ({}));
+        setError((data as any)?.error || "Something went wrong. Please try again.");
+      }
+    } catch {
+      setError("Network error. Please check your connection and try again.");
+    }
+
+    setSubmitting(false);
+  }
+
+  return (
+    <div className="screen">
+      <Back onClick={onBack} />
+
+      <div className="gate-badge">
+        🔒 One quick step before your results
+      </div>
+
+      <h2 className="screen-title">Where should we<br /><em>send your estimate?</em></h2>
+      <p className="screen-sub">
+        Enter your details below to unlock your full pricing breakdown and client-ready justification.
+      </p>
+
+      <div className="gate-pair">
+        <div className="gate-field">
+          <div className="gate-label">Full name <span style={{ color: "var(--gold)" }}>*</span></div>
+          <input
+            className="gate-in"
+            type="text"
+            placeholder="Your name"
+            value={state.gateName || ""}
+            onChange={e => onUpdate({ gateName: e.target.value })}
+            autoFocus
+          />
+        </div>
+        <div className="gate-field">
+          <div className="gate-label">Contact number <span style={{ color: "var(--gold)" }}>*</span></div>
+          <input
+            className="gate-in"
+            type="tel"
+            placeholder="+91 98765 43210"
+            value={state.gateEmail || ""}
+            onChange={e => onUpdate({ gateEmail: e.target.value })}
+          />
+        </div>
+      </div>
+
+      <div className="gate-field">
+        <div className="gate-label">Project summary <span style={{ color: "var(--ink3)", fontWeight: 300 }}>(auto-filled)</span></div>
+        <input
+          className="gate-in readonly"
+          type="text"
+          value={prefill}
+          readOnly
+        />
+      </div>
+
+      <div className="gate-privacy">
+        <span className="gate-privacy-icon">🔒</span>
+        <span>Your details are only used to follow up on this estimate. No spam, no newsletters — ever.</span>
+      </div>
+
+      {error && (
+        <div className="warn-box" style={{ marginBottom: 16 }}>{error}</div>
+      )}
+
+      <GoldBtn onClick={handleSubmit} disabled={submitting}>
+        {submitting ? "Submitting…" : "View my estimate →"}
+      </GoldBtn>
     </div>
   );
 }
@@ -2220,8 +2202,52 @@ function StepRoleReview({ state, onNext, onBack, jumpTo }: any) {
 // RESULTS SCREEN
 // ─────────────────────────────────────────────────────────────────────────────
 
+function StepFormGate({ onSuccess, onBack }: any) {
+  const [name,       setName]       = useState("");
+  const [phone,      setPhone]      = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [error,      setError]      = useState("");
+  const isValid = name.trim().length > 0 && phone.trim().length >= 7;
+
+  async function handleSubmit() {
+    if (!isValid) return;
+    setSubmitting(true);
+    setError("");
+    try {
+      const res = await fetch("https://formspree.io/f/xbdwknoe", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Accept": "application/json" },
+        body: JSON.stringify({ name, phone }),
+      });
+      if (res.ok) { onSuccess(); }
+      else { setError("Something went wrong. Please try again."); setSubmitting(false); }
+    } catch { setError("Network error. Please try again."); setSubmitting(false); }
+  }
+
+  return (
+    <div className="screen">
+      <Back onClick={onBack} />
+      <div className="eyebrow">Almost there</div>
+      <h2 className="screen-title">One quick step before<br />your <em>estimate.</em></h2>
+      <p className="screen-sub">We'd love to reach out and hear how FairScope worked for you.</p>
+      <div className="fg-field">
+        <label className="fg-label">Full name *</label>
+        <input className="fg-input" type="text" placeholder="Your name" value={name} onChange={e => setName(e.target.value)} autoFocus />
+      </div>
+      <div className="fg-field">
+        <label className="fg-label">Contact number *</label>
+        <input className="fg-input" type="tel" placeholder="e.g. 9876543210" value={phone} onChange={e => setPhone(e.target.value)} />
+      </div>
+      <p className="fg-privacy">🔒 Your details are only used for feedback. No spam, ever.</p>
+      {error && <div className="warn-box" style={{ marginBottom: 16 }}>{error}</div>}
+      <GoldBtn onClick={handleSubmit} disabled={!isValid || submitting}>
+        {submitting ? "Submitting…" : "See my estimate →"}
+      </GoldBtn>
+    </div>
+  );
+}
 function ResultsScreen({ state, onRestart, onEdit }: any) {
-  const [copied, setCopied] = useState(false);
+  const [copied, setCopied]       = useState(false);
   const [downloaded, setDownloaded] = useState(false);
   const est    = calcEstimate(state);
   const just   = buildJustification(state, est);
@@ -2278,16 +2304,12 @@ function ResultsScreen({ state, onRestart, onEdit }: any) {
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
-    // Release object URL after short delay — does NOT navigate away
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
     setDownloaded(true);
     setTimeout(() => setDownloaded(false), 3000);
   }
 
-  // Effort grid: role-aware labels
   const r = state.role || "product";
-  const pl = getPrimaryLabel(r);
-  const sl = getSecondaryLabel(r);
 
   return (
     <div className="result-wrap">
@@ -2372,7 +2394,6 @@ function ResultsScreen({ state, onRestart, onEdit }: any) {
         <div className="result-card">
           <div className="rc-title">Effort Breakdown</div>
           <div className="hrs-grid">
-            {/* Product design */}
             {hrsDetail.primaryHrs !== undefined && (
               <div className="hrs-cell">
                 <div className="hrs-n">{hrsDetail.primaryHrs}</div>
@@ -2385,7 +2406,6 @@ function ResultsScreen({ state, onRestart, onEdit }: any) {
                 <div className="hrs-l">Secondary screens ({state.secondaryScreens})</div>
               </div>
             )}
-            {/* Graphic */}
             {hrsDetail.complexBase !== undefined && (
               <div className="hrs-cell">
                 <div className="hrs-n">{hrsDetail.complexBase}</div>
@@ -2398,7 +2418,6 @@ function ResultsScreen({ state, onRestart, onEdit }: any) {
                 <div className="hrs-l">Simple deliverables ({state.secondaryScreens})</div>
               </div>
             )}
-            {/* Branding */}
             {hrsDetail.coreBase !== undefined && (
               <div className="hrs-cell">
                 <div className="hrs-n">{hrsDetail.coreBase}</div>
@@ -2411,7 +2430,6 @@ function ResultsScreen({ state, onRestart, onEdit }: any) {
                 <div className="hrs-l">Extended assets ({state.secondaryScreens})</div>
               </div>
             )}
-            {/* Video */}
             {hrsDetail.durationBase !== undefined && (
               <div className="hrs-cell">
                 <div className="hrs-n">{hrsDetail.durationBase}</div>
@@ -2424,7 +2442,6 @@ function ResultsScreen({ state, onRestart, onEdit }: any) {
                 <div className="hrs-l">Footage overhead</div>
               </div>
             )}
-            {/* Shared */}
             {(hrsDetail.uxHrs > 0 || hrsDetail.addonHrs > 0) && (
               <div className="hrs-cell">
                 <div className="hrs-n">{hrsDetail.uxHrs ?? hrsDetail.addonHrs}</div>
@@ -2510,14 +2527,14 @@ function ResultsScreen({ state, onRestart, onEdit }: any) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const STEPPER_LABELS = {
-  quick:          ["Project", "Hours", "Revisions", "Experience", "Your Rate", "Overhead", "Summary"],
-  scope:          ["Project", "Screens", "Platform", "Complexity", "System", "UX", "Revisions", "Experience", "Your Rate", "Overhead", "Summary"],
-  quick_graphic:  ["Hours", "Revisions", "Experience", "Your Rate", "Overhead", "Summary"],
-  quick_branding: ["Hours", "Revisions", "Experience", "Your Rate", "Overhead", "Summary"],
-  quick_video:    ["Hours", "Revisions", "Experience", "Your Rate", "Overhead", "Summary"],
-  scope_graphic:  ["Level", "Deliverables", "Brand Align.", "Complexity", "Add-ons", "Revisions", "Experience", "Your Rate", "Overhead", "Review", "Summary"],
-  scope_branding: ["Level", "Deliverables", "Scope", "Strategy", "Add-ons", "Revisions", "Experience", "Your Rate", "Overhead", "Review", "Summary"],
-  scope_video:    ["Level", "Duration", "Footage", "Complexity", "Add-ons", "Revisions", "Experience", "Your Rate", "Overhead", "Review", "Summary"],
+  quick:          ["Project", "Hours", "Revisions", "Experience", "Your Rate", "Overhead", "Sustainability", "Details"],
+  scope:          ["Project", "Screens", "Platform", "Complexity", "System", "UX", "Revisions", "Experience", "Your Rate", "Overhead", "Sustainability", "Details"],
+  quick_graphic:  ["Hours", "Revisions", "Experience", "Your Rate", "Overhead", "Sustainability", "Details"],
+  quick_branding: ["Hours", "Revisions", "Experience", "Your Rate", "Overhead", "Sustainability", "Details"],
+  quick_video:    ["Hours", "Revisions", "Experience", "Your Rate", "Overhead", "Sustainability", "Details"],
+  scope_graphic:  ["Level", "Deliverables", "Brand Align.", "Complexity", "Add-ons", "Revisions", "Experience", "Your Rate", "Overhead", "Review", "Sustainability", "Details"],
+  scope_branding: ["Level", "Deliverables", "Scope", "Strategy", "Add-ons", "Revisions", "Experience", "Your Rate", "Overhead", "Review", "Sustainability", "Details"],
+  scope_video:    ["Level", "Duration", "Footage", "Complexity", "Add-ons", "Revisions", "Experience", "Your Rate", "Overhead", "Review", "Sustainability", "Details"],
 };
 
 function FlowRoadmap({ mode, role, flowStep }: any) {
@@ -2579,12 +2596,14 @@ const INIT_STATE = {
   designSystem:     "none",
   revisions:        2,
   experience:       null,
-  customRate:       null,   // ₹/hr — overrides market range when set
+  customRate:       null,
   uxActivities:     [],
   pmOverhead:       "light",
   utilizationRate:  UTILIZATION_DEFAULT,
   freelanceMult:    FREELANCE_MULT_DEFAULT,
   includeGST:       false,
+  gateName:         "",
+  gateEmail:        "",
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -2602,11 +2621,11 @@ function FairScopeEstimator() {
   const top  = useCallback(() => { setTimeout(() => (topRef.current as HTMLElement | null)?.scrollIntoView({ behavior: "smooth", block: "start" }), 40); }, []);
 
   // ── STEP COUNTS ──────────────────────────────────────────────────────────
+  // Each flow now has +1 for StepFormGate and +1 for StepSustainability (moved before gate)
   function getTotalSteps() {
     const r = state.role || "product";
-    // +1 everywhere for StepCustomRate (after Experience)
-    if (state.mode === "quick") return r === "product" ? 7 : 6;
-    return r === "product" ? 11 : 11;
+    if (state.mode === "quick") return r === "product" ? 8 : 7;
+    return r === "product" ? 12 : 12;
   }
   const totalSteps = getTotalSteps();
   const pct = screen === "results" ? 100 : screen === "entry" ? 0 : ((flowStep - 1) / totalSteps) * 100;
@@ -2636,63 +2655,70 @@ function FairScopeEstimator() {
     top();
   }
 
-  // Resume flow at last step (sustainability) so user can tweak without losing inputs
   function goEdit() {
     setScreen("flow");
-    setFlowStep(totalSteps);
+    setFlowStep(totalSteps - 1); // go back to sustainability step
     top();
   }
 
-  function showResults() { setScreen("results"); top(); }
+function showResults() { setScreen("formgate"); top(); }
 
   // ── STEP ARRAYS ──────────────────────────────────────────────────────────
   const role = state.role || "product";
 
-  // PRODUCT DESIGN — unchanged flow
+  // PRODUCT DESIGN — quick (8 steps)
   const PRODUCT_QUICK_STEPS = [
-    () => <StepProjectType    state={state} onUpdate={upd} onNext={next} onBack={back} />,
-    () => <StepHours          state={state} onUpdate={upd} onNext={next} onBack={back} />,
-    () => <StepRevisions      state={state} onUpdate={upd} onNext={next} onBack={back} />,
-    () => <StepExperience     state={state} onUpdate={upd} onNext={next} onBack={back} isFinal={false} />,
-    () => <StepCustomRate     state={state} onUpdate={upd} onNext={next} onBack={back} />,
-    () => <StepPMOverhead     state={state} onUpdate={upd} onNext={next} onBack={back} />,
-    () => <StepSustainability state={state} onUpdate={upd} onNext={showResults} onBack={back} />,
+    () => <StepProjectType    state={state} onUpdate={upd} onNext={next} onBack={back} />,           // 1
+    () => <StepHours          state={state} onUpdate={upd} onNext={next} onBack={back} />,           // 2
+    () => <StepRevisions      state={state} onUpdate={upd} onNext={next} onBack={back} />,           // 3
+    () => <StepExperience     state={state} onUpdate={upd} onNext={next} onBack={back} isFinal={false} />, // 4
+    () => <StepCustomRate     state={state} onUpdate={upd} onNext={next} onBack={back} />,           // 5
+    () => <StepPMOverhead     state={state} onUpdate={upd} onNext={next} onBack={back} />,           // 6
+    () => <StepSustainability state={state} onUpdate={upd} onNext={next} onBack={back} />,           // 7
+    () => <StepFormGate       state={state} onUpdate={upd} onNext={showResults} onBack={back} />,    // 8
   ];
+
+  // PRODUCT DESIGN — scope (12 steps)
   const PRODUCT_SCOPE_STEPS = [
-    () => <StepProjectType    state={state} onUpdate={upd} onNext={next} onBack={back} />,
-    () => <StepScreens        state={state} onUpdate={upd} onNext={next} onBack={back} />,
-    () => <StepPlatform       state={state} onUpdate={upd} onNext={next} onBack={back} />,
-    () => <StepFlowComplexity state={state} onUpdate={upd} onNext={next} onBack={back} />,
-    () => <StepDesignSystem   state={state} onUpdate={upd} onNext={next} onBack={back} />,
-    () => <StepUXActivities   state={state} onUpdate={upd} onNext={next} onBack={back} />,
-    () => <StepRevisions      state={state} onUpdate={upd} onNext={next} onBack={back} />,
-    () => <StepExperience     state={state} onUpdate={upd} onNext={next} onBack={back} isFinal={false} />,
-    () => <StepCustomRate     state={state} onUpdate={upd} onNext={next} onBack={back} />,
-    () => <StepPMOverhead     state={state} onUpdate={upd} onNext={next} onBack={back} />,
-    () => <StepSustainability state={state} onUpdate={upd} onNext={showResults} onBack={back} />,
+    () => <StepProjectType    state={state} onUpdate={upd} onNext={next} onBack={back} />,           // 1
+    () => <StepScreens        state={state} onUpdate={upd} onNext={next} onBack={back} />,           // 2
+    () => <StepPlatform       state={state} onUpdate={upd} onNext={next} onBack={back} />,           // 3
+    () => <StepFlowComplexity state={state} onUpdate={upd} onNext={next} onBack={back} />,           // 4
+    () => <StepDesignSystem   state={state} onUpdate={upd} onNext={next} onBack={back} />,           // 5
+    () => <StepUXActivities   state={state} onUpdate={upd} onNext={next} onBack={back} />,           // 6
+    () => <StepRevisions      state={state} onUpdate={upd} onNext={next} onBack={back} />,           // 7
+    () => <StepExperience     state={state} onUpdate={upd} onNext={next} onBack={back} isFinal={false} />, // 8
+    () => <StepCustomRate     state={state} onUpdate={upd} onNext={next} onBack={back} />,           // 9
+    () => <StepPMOverhead     state={state} onUpdate={upd} onNext={next} onBack={back} />,           // 10
+    () => <StepSustainability state={state} onUpdate={upd} onNext={next} onBack={back} />,           // 11
+    () => <StepFormGate       state={state} onUpdate={upd} onNext={showResults} onBack={back} />,    // 12
   ];
 
+  // NON-PRODUCT quick (7 steps)
   const ROLE_QUICK_STEPS = [
-    () => <StepHours          state={state} onUpdate={upd} onNext={next} onBack={back} />,
-    () => <StepRevisions      state={state} onUpdate={upd} onNext={next} onBack={back} />,
-    () => <StepExperience     state={state} onUpdate={upd} onNext={next} onBack={back} isFinal={false} />,
-    () => <StepCustomRate     state={state} onUpdate={upd} onNext={next} onBack={back} />,
-    () => <StepPMOverhead     state={state} onUpdate={upd} onNext={next} onBack={back} />,
-    () => <StepSustainability state={state} onUpdate={upd} onNext={showResults} onBack={back} />,
+    () => <StepHours          state={state} onUpdate={upd} onNext={next} onBack={back} />,           // 1
+    () => <StepRevisions      state={state} onUpdate={upd} onNext={next} onBack={back} />,           // 2
+    () => <StepExperience     state={state} onUpdate={upd} onNext={next} onBack={back} isFinal={false} />, // 3
+    () => <StepCustomRate     state={state} onUpdate={upd} onNext={next} onBack={back} />,           // 4
+    () => <StepPMOverhead     state={state} onUpdate={upd} onNext={next} onBack={back} />,           // 5
+    () => <StepSustainability state={state} onUpdate={upd} onNext={next} onBack={back} />,           // 6
+    () => <StepFormGate       state={state} onUpdate={upd} onNext={showResults} onBack={back} />,    // 7
   ];
 
+  // NON-PRODUCT scope (12 steps)
   const ROLE_SCOPE_STEPS = [
-    () => <StepProjectLevel   state={state} onUpdate={upd} onNext={next} onBack={back} />,
-    () => <StepRoleScope      state={state} onUpdate={upd} onNext={next} onBack={back} />,
-    () => <StepRolePlatform   state={state} onUpdate={upd} onNext={next} onBack={back} />,
-    () => <StepRoleComplexity state={state} onUpdate={upd} onNext={next} onBack={back} />,
-    () => <StepRoleAddons     state={state} onUpdate={upd} onNext={next} onBack={back} />,
-    () => <StepRevisions      state={state} onUpdate={upd} onNext={next} onBack={back} />,
-    () => <StepExperience     state={state} onUpdate={upd} onNext={next} onBack={back} isFinal={false} />,
-    () => <StepCustomRate     state={state} onUpdate={upd} onNext={next} onBack={back} />,
-    () => <StepPMOverhead     state={state} onUpdate={upd} onNext={next} onBack={back} />,
-    () => <StepRoleReview     state={state} onNext={next} onBack={back} jumpTo={goStep} />,
-    () => <StepSustainability state={state} onUpdate={upd} onNext={showResults} onBack={back} />,
+    () => <StepProjectLevel   state={state} onUpdate={upd} onNext={next} onBack={back} />,           // 1
+    () => <StepRoleScope      state={state} onUpdate={upd} onNext={next} onBack={back} />,           // 2
+    () => <StepRolePlatform   state={state} onUpdate={upd} onNext={next} onBack={back} />,           // 3
+    () => <StepRoleComplexity state={state} onUpdate={upd} onNext={next} onBack={back} />,           // 4
+    () => <StepRoleAddons     state={state} onUpdate={upd} onNext={next} onBack={back} />,           // 5
+    () => <StepRevisions      state={state} onUpdate={upd} onNext={next} onBack={back} />,           // 6
+    () => <StepExperience     state={state} onUpdate={upd} onNext={next} onBack={back} isFinal={false} />, // 7
+    () => <StepCustomRate     state={state} onUpdate={upd} onNext={next} onBack={back} />,           // 8
+    () => <StepPMOverhead     state={state} onUpdate={upd} onNext={next} onBack={back} />,           // 9
+    () => <StepRoleReview     state={state} onNext={next} onBack={back} jumpTo={goStep} />,          // 10
+    () => <StepSustainability state={state} onUpdate={upd} onNext={next} onBack={back} />,           // 11
+    () => <StepFormGate       state={state} onUpdate={upd} onNext={showResults} onBack={back} />,    // 12
   ];
 
   // ── DISPATCH ─────────────────────────────────────────────────────────────
@@ -2750,9 +2776,10 @@ function FairScopeEstimator() {
           </div>
 
           <div className="main-inner">
-            {screen === "entry"   && <EntryScreen onSelect={startMode} />}
-            {screen === "flow"    && currentStepFn && currentStepFn()}
-            {screen === "results" && <ResultsScreen state={state} onRestart={restart} onEdit={goEdit} />}
+            {screen === "entry"    && <EntryScreen onSelect={startMode} />}
+            {screen === "flow"     && currentStepFn && currentStepFn()}
+            {screen === "formgate" && <StepFormGate onSuccess={() => { setScreen("results"); top(); }} onBack={() => { setScreen("flow"); setFlowStep(totalSteps); top(); }} />}
+            {screen === "results"  && <ResultsScreen state={state} onRestart={restart} onEdit={goEdit} />}
           </div>
           <MakerFooter />
         </div>
