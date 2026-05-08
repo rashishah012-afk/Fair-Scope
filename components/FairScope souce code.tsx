@@ -2543,7 +2543,7 @@ function showResults() { setScreen("formgate"); top(); }
     () => <StepCustomRate     state={state} onUpdate={upd} onNext={next} onBack={back} />,           // 5
     () => <StepPMOverhead     state={state} onUpdate={upd} onNext={next} onBack={back} />,           // 6
     () => <StepSustainability state={state} onUpdate={upd} onNext={next} onBack={back} />,           // 7
-    () => <StepFormGate       state={state} onUpdate={upd} onNext={showResults} onBack={back} />,    // 8
+    () => <StepFormGate       onSuccess={showResults} onBack={back} />,    // 8
   ];
 
   // PRODUCT DESIGN — scope (12 steps)
@@ -2559,7 +2559,7 @@ function showResults() { setScreen("formgate"); top(); }
     () => <StepCustomRate     state={state} onUpdate={upd} onNext={next} onBack={back} />,           // 9
     () => <StepPMOverhead     state={state} onUpdate={upd} onNext={next} onBack={back} />,           // 10
     () => <StepSustainability state={state} onUpdate={upd} onNext={next} onBack={back} />,           // 11
-    () => <StepFormGate       state={state} onUpdate={upd} onNext={showResults} onBack={back} />,    // 12
+    () => <StepFormGate       onSuccess={showResults} onBack={back} />,    // 12
   ];
 
   // NON-PRODUCT quick (7 steps)
@@ -2570,7 +2570,7 @@ function showResults() { setScreen("formgate"); top(); }
     () => <StepCustomRate     state={state} onUpdate={upd} onNext={next} onBack={back} />,           // 4
     () => <StepPMOverhead     state={state} onUpdate={upd} onNext={next} onBack={back} />,           // 5
     () => <StepSustainability state={state} onUpdate={upd} onNext={next} onBack={back} />,           // 6
-    () => <StepFormGate       state={state} onUpdate={upd} onNext={showResults} onBack={back} />,    // 7
+    () => <StepFormGate       onSuccess={showResults} onBack={back} />,    // 7
   ];
 
   // NON-PRODUCT scope (12 steps)
@@ -2586,7 +2586,7 @@ function showResults() { setScreen("formgate"); top(); }
     () => <StepPMOverhead     state={state} onUpdate={upd} onNext={next} onBack={back} />,           // 9
     () => <StepRoleReview     state={state} onNext={next} onBack={back} jumpTo={goStep} />,          // 10
     () => <StepSustainability state={state} onUpdate={upd} onNext={next} onBack={back} />,           // 11
-    () => <StepFormGate       state={state} onUpdate={upd} onNext={showResults} onBack={back} />,    // 12
+    () => <StepFormGate       onSuccess={showResults} onBack={back} />,    // 12
   ];
 
   // ── DISPATCH ─────────────────────────────────────────────────────────────
